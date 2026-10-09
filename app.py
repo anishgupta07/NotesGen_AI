@@ -5,6 +5,8 @@ from core.audio_processor import process_input
 from core.transcriber import transcribe_all
 from core.summarizer import summarize, generate_title
 from core.extractor import extract_action_items, extract_key_decisions, extract_questions
+from core.notes_generator import generate_video_notes
+from core.youtube_helper import get_youtube_transcript_with_timestamps
 from rag.rag_engine import build_rag_chain, ask_question
 
 load_dotenv()
@@ -335,6 +337,25 @@ with st.sidebar:
     st.markdown('<div class="hero-sub">Meeting Intelligence</div>', unsafe_allow_html=True)
     st.markdown("---")
 
+    st.markdown('<span class="badge badge-purple">Mode</span>', unsafe_allow_html=True)
+    mode = st.radio("Assistant Mode", ["📚 YouTube Video Notes", "🎬 Meeting Intelligence"], index=0, label_visibility="collapsed")
+
+    note_style = "study_guide"
+    if mode == "📚 YouTube Video Notes":
+        st.markdown('<span class="badge badge-cyan" style="margin-top:0.5rem">Note Style</span>', unsafe_allow_html=True)
+        note_style = st.selectbox(
+            "Note Style",
+            ["study_guide", "cornell", "cheatsheet"],
+            index=0,
+            format_func=lambda x: {
+                "study_guide": "📖 Comprehensive Study Guide",
+                "cornell": "📓 Cornell Notes Format",
+                "cheatsheet": "⚡ Quick Cheatsheet"
+            }[x],
+            label_visibility="collapsed"
+        )
+
+    st.markdown("---")
     st.markdown('<span class="badge badge-purple">Input</span>', unsafe_allow_html=True)
     source = st.text_input("YouTube URL or File Path", placeholder="https://youtube.com/watch?v=... or /path/to/file.mp4")
 
@@ -345,14 +366,23 @@ with st.sidebar:
     if st.session_state.pipeline_done:
         st.markdown("---")
         st.markdown('<span class="badge badge-green">Pipeline Status</span>', unsafe_allow_html=True)
-        for step, icon, label in [
-            ("audio",      "🔊", "Audio Processing"),
-            ("transcript", "📝", "Transcription"),
-            ("title",      "🏷️", "Title Generation"),
-            ("summary",    "📋", "Summarisation"),
-            ("extract",    "🔍", "Extraction"),
-            ("rag",        "🧠", "RAG Engine"),
-        ]:
+        if st.session_state.result and st.session_state.result.get("mode") == "📚 YouTube Video Notes":
+            pipeline_steps_list = [
+                ("transcript", "📝", "Transcript Retrieval"),
+                ("title",      "🏷️", "Title Generation"),
+                ("notes",      "📚", "Notes Generation"),
+                ("rag",        "🧠", "RAG Engine"),
+            ]
+        else:
+            pipeline_steps_list = [
+                ("audio",      "🔊", "Audio Processing"),
+                ("transcript", "📝", "Transcription"),
+                ("title",      "🏷️", "Title Generation"),
+                ("summary",    "📋", "Summarisation"),
+                ("extract",    "🔍", "Extraction"),
+                ("rag",        "🧠", "RAG Engine"),
+            ]
+        for step, icon, label in pipeline_steps_list:
             render_step_bar(label, step, icon)
 
 # ─── Main Area ──────────────────────────────────────────────────────────────────
@@ -379,41 +409,73 @@ if run_btn:
             with progress_placeholder.container():
                 st.info("⚙️ Pipeline running — see sidebar for live status…")
 
-            update_step("audio", "active")
-            chunks = process_input(source)
-            update_step("audio", "done")
+            transcript = None
 
-            update_step("transcript", "active")
-            transcript = transcribe_all(chunks, language)
-            update_step("transcript", "done")
+            # 1. Fast path: check for direct YouTube subtitles first
+            if "youtube.com" in source or "youtu.be" in source:
+                update_step("transcript", "active")
+                transcript = get_youtube_transcript_with_timestamps(source)
+                if transcript:
+                    update_step("transcript", "done")
 
+            # 2. Fallback: download audio and transcribe via Whisper
+            if not transcript:
+                update_step("audio", "active")
+                chunks = process_input(source)
+                update_step("audio", "done")
+
+                update_step("transcript", "active")
+                transcript = transcribe_all(chunks, language)
+                update_step("transcript", "done")
+
+            # 3. Generate Title
             update_step("title", "active")
             title = generate_title(transcript)
             update_step("title", "done")
 
-            update_step("summary", "active")
-            summary = summarize(transcript)
-            update_step("summary", "done")
+            # 4. Mode-specific processing
+            if mode == "📚 YouTube Video Notes":
+                update_step("notes", "active")
+                notes = generate_video_notes(transcript, style=note_style, language=language)
+                update_step("notes", "done")
 
-            update_step("extract", "active")
-            action_items  = extract_action_items(transcript)
-            decisions     = extract_key_decisions(transcript)
-            questions     = extract_questions(transcript)
-            update_step("extract", "done")
+                update_step("rag", "active")
+                rag_chain = build_rag_chain(transcript)
+                update_step("rag", "done")
 
-            update_step("rag", "active")
-            rag_chain = build_rag_chain(transcript)
-            update_step("rag", "done")
+                st.session_state.result = {
+                    "mode": mode,
+                    "title": title,
+                    "transcript": transcript,
+                    "notes": notes,
+                    "rag_chain": rag_chain,
+                }
+            else:
+                update_step("summary", "active")
+                summary = summarize(transcript)
+                update_step("summary", "done")
 
-            st.session_state.result = {
-                "title": title,
-                "transcript": transcript,
-                "summary": summary,
-                "action_items": action_items,
-                "key_decisions": decisions,
-                "open_questions": questions,
-                "rag_chain": rag_chain,
-            }
+                update_step("extract", "active")
+                action_items  = extract_action_items(transcript)
+                decisions     = extract_key_decisions(transcript)
+                questions     = extract_questions(transcript)
+                update_step("extract", "done")
+
+                update_step("rag", "active")
+                rag_chain = build_rag_chain(transcript)
+                update_step("rag", "done")
+
+                st.session_state.result = {
+                    "mode": mode,
+                    "title": title,
+                    "transcript": transcript,
+                    "summary": summary,
+                    "action_items": action_items,
+                    "key_decisions": decisions,
+                    "open_questions": questions,
+                    "rag_chain": rag_chain,
+                }
+
             st.session_state.pipeline_done = True
             progress_placeholder.success("✅ Analysis complete!")
             time.sleep(0.5)
@@ -421,7 +483,7 @@ if run_btn:
             st.rerun()
 
         except Exception as e:
-            for k in ["audio","transcript","title","summary","extract","rag"]:
+            for k in ["audio","transcript","title","summary","extract","notes","rag"]:
                 if st.session_state.pipeline_steps.get(k) == "active":
                     st.session_state.pipeline_steps[k] = "pending"
             progress_placeholder.error(f"❌ Error: {e}")
@@ -439,43 +501,68 @@ if st.session_state.result:
         </div>
     </div>""", unsafe_allow_html=True)
 
-    # Top row: summary + transcript
-    col1, col2 = st.columns([3, 2], gap="medium")
+    # Display YouTube Video Notes Mode
+    if r.get("mode") == "📚 YouTube Video Notes":
+        col_note_title, col_dl = st.columns([4, 1], gap="medium")
+        with col_note_title:
+            st.markdown('<div class="card-title" style="font-size:1.1rem;margin:0.5rem 0">📚 Generated Study Notes</div>', unsafe_allow_html=True)
+        with col_dl:
+            st.download_button(
+                label="📥 Download (.md)",
+                data=r.get("notes", ""),
+                file_name=f"{r['title'][:30].strip()}_notes.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
 
-    with col1:
         st.markdown(f"""
         <div class="card">
-            <div class="card-title">📋 Summary</div>
-            <div class="card-content">{r['summary']}</div>
+            <div class="card-content" style="white-space: pre-wrap; font-size: 0.9rem; line-height: 1.8;">
+{r.get('notes', '')}
+            </div>
         </div>""", unsafe_allow_html=True)
 
-    with col2:
-        with st.expander("📝 Full Transcript", expanded=False):
+        with st.expander("📝 Full Video Transcript", expanded=False):
             st.markdown(f'<div class="transcript-box">{r["transcript"]}</div>', unsafe_allow_html=True)
 
-    # Second row: action items | decisions | questions
-    c1, c2, c3 = st.columns(3, gap="medium")
+    else:
+        # Display Meeting Intelligence Mode
+        col1, col2 = st.columns([3, 2], gap="medium")
 
-    with c1:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">✅ Action Items</div>
-            <div class="card-content">{r['action_items']}</div>
-        </div>""", unsafe_allow_html=True)
+        with col1:
+            st.markdown(f"""
+            <div class="card">
+                <div class="card-title">📋 Summary</div>
+                <div class="card-content">{r['summary']}</div>
+            </div>""", unsafe_allow_html=True)
 
-    with c2:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">🔑 Key Decisions</div>
-            <div class="card-content">{r['key_decisions']}</div>
-        </div>""", unsafe_allow_html=True)
+        with col2:
+            with st.expander("📝 Full Transcript", expanded=False):
+                st.markdown(f'<div class="transcript-box">{r["transcript"]}</div>', unsafe_allow_html=True)
 
-    with c3:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">❓ Open Questions</div>
-            <div class="card-content">{r['open_questions']}</div>
-        </div>""", unsafe_allow_html=True)
+        # Second row: action items | decisions | questions
+        c1, c2, c3 = st.columns(3, gap="medium")
+
+        with c1:
+            st.markdown(f"""
+            <div class="card">
+                <div class="card-title">✅ Action Items</div>
+                <div class="card-content">{r['action_items']}</div>
+            </div>""", unsafe_allow_html=True)
+
+        with c2:
+            st.markdown(f"""
+            <div class="card">
+                <div class="card-title">🔑 Key Decisions</div>
+                <div class="card-content">{r['key_decisions']}</div>
+            </div>""", unsafe_allow_html=True)
+
+        with c3:
+            st.markdown(f"""
+            <div class="card">
+                <div class="card-title">❓ Open Questions</div>
+                <div class="card-content">{r['open_questions']}</div>
+            </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
 

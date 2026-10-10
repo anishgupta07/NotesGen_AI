@@ -3,7 +3,7 @@ export interface ChatSummary {
   title: string;
   video_url: string;
   language: 'hinglish' | 'english';
-  note_style: 'study_guide' | 'cornell' | 'cheatsheet';
+  note_style: 'detailed' | 'cheatsheet';
   created_at: string;
 }
 
@@ -24,5 +24,8 @@ export interface ChatDetail extends ChatSummary {
 export interface GenerateNotesRequest {
   url: string;
   language: 'hinglish' | 'english';
-  style: 'study_guide' | 'cornell' | 'cheatsheet';
+  style: 'detailed' | 'cheatsheet';
+  timeline_mode?: 'full' | 'custom';
+  start_time?: string;
+  end_time?: string;
 }

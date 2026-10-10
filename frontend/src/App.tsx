@@ -98,12 +98,22 @@ export const App: React.FC = () => {
   const handleGenerateNotes = async (
     url: string,
     language: 'hinglish' | 'english',
-    style: 'study_guide' | 'cornell' | 'cheatsheet'
+    style: 'detailed' | 'cheatsheet',
+    timelineMode: 'full' | 'custom' = 'full',
+    startTime?: string,
+    endTime?: string
   ) => {
     try {
       setIsGenerating(true);
       setErrorMessage(null);
-      const result = await requestGenerateNotes({ url, language, style });
+      const result = await requestGenerateNotes({
+        url,
+        language,
+        style,
+        timeline_mode: timelineMode,
+        start_time: startTime,
+        end_time: endTime,
+      });
 
       // Update state with newly created chat
       setChats((prev) => [
@@ -233,8 +243,7 @@ export const App: React.FC = () => {
                   Synthesizing Video Notes...
                 </h2>
                 <p className="text-sm text-slate-500 leading-relaxed">
-                  Fetching YouTube transcript, generating comprehensive structured notes, and
-                  building isolated topic vector store.
+                  Verifying educational content, analyzing timeline chapters, extracting the instructor's analogies, and formatting structured notes.
                 </p>
               </div>
               <div className="flex items-center gap-2 text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-100 px-3.5 py-1.5 rounded-full">

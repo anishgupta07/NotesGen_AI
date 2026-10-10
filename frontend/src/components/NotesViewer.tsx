@@ -53,9 +53,10 @@ export const NotesViewer: React.FC<NotesViewerProps> = ({ chat }) => {
   });
 
   const styleLabelMap: Record<string, string> = {
-    study_guide: 'Study Guide',
+    detailed: 'Detailed Notes',
+    cheatsheet: 'Cheat Sheet',
+    study_guide: 'Detailed Notes',
     cornell: 'Cornell Notes',
-    cheatsheet: 'Cheatsheet',
   };
 
   return (

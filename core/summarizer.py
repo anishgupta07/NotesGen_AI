@@ -50,24 +50,25 @@ def summarize(transcript : str) -> str:
 
     return combined_chain.invoke(combined)
 
-def generate_title(transcipt : str) -> str:
-    llm = get_llm()
+def generate_title(transcipt: str) -> str:
+    llm = get_llm(model="qwen/qwen3.8-27b", max_tokens=40, temperature=0.2)
 
     title_chain = (
-        RunnablePassthrough() | RunnableLambda(lambda x:{"text":x}) | 
+        RunnablePassthrough() | RunnableLambda(lambda x: {"text": x}) | 
         ChatPromptTemplate.from_messages([
              (
                 "system",
-                "Based on the meeting transcript, generate a short professional meeting title "
-                "(max 8 words). Only return the title, nothing else.",
+                "Based on the transcript, generate a short professional educational video title "
+                "(max 7 words). Only return the title, nothing else.",
             ),
             ("human", "{text}"),
         ])
         | llm
-        |StrOutputParser()
+        | StrOutputParser()
     )
 
-    return title_chain.invoke(transcipt[:2000])
+    return title_chain.invoke(transcipt[:1000]).strip().strip('"\'')
+
 
 
 

@@ -17,11 +17,7 @@ import {
   Loader2,
   AlertCircle,
   X,
-  Columns2,
-  FileText,
   MessageSquare,
-  ArrowLeft,
-  PanelLeft,
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -199,11 +195,14 @@ export const App: React.FC = () => {
 
       {/* Main Content Workspace */}
       <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden bg-[#090a0c]">
-        {/* Top Navigation */}
+        {/* Top Navigation: Now includes New Video and View Mode toggles to eliminate extra row */}
         <TopNav
           isSidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-          activeTitle={activeChat?.title}
+          activeChat={activeChat}
+          onNewChat={handleNewChat}
+          viewMode={viewMode}
+          onSetViewMode={setViewMode}
         />
 
         {/* Global Error Banner */}
@@ -232,10 +231,10 @@ export const App: React.FC = () => {
               </div>
               <div className="space-y-1.5 max-w-md">
                 <h2 className="text-xl font-extrabold text-white tracking-tight">
-                  Generating Study Notes...
+                  Generating 100% Concept Crux...
                 </h2>
                 <p className="text-xs md:text-sm text-[#848c9c] leading-relaxed">
-                  Checking educational guardrail, structuring timeline flow, extracting instructor's real analogies, and compiling key points to note down.
+                  Extracting instructor's exact analogies, covering 100% of concepts topic-wise, and compiling structured notes in flowing Hinglish.
                 </p>
               </div>
               <div className="flex items-center gap-2 text-xs font-semibold text-[#ff4d66] bg-[#1a0b10] border border-[#35141c] px-3.5 py-1.5 rounded-full">
@@ -249,120 +248,54 @@ export const App: React.FC = () => {
               <Loader2 className="w-7 h-7 animate-spin text-[#ff2442]" />
             </div>
           ) : activeChat ? (
-            /* Active Chat View (Split View / Full-Screen Notes / Full-Screen Chat) */
-            <div className="h-full flex flex-col">
-              {/* Sub-header view switcher bar matching dark aesthetic */}
-              <div className="px-5 py-2 border-b border-[#171820] bg-[#0b0c0f] flex items-center justify-between text-xs shrink-0">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleNewChat}
-                    className="flex items-center gap-1.5 text-[#848c9c] hover:text-white font-semibold transition cursor-pointer"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>New Video</span>
-                  </button>
-
-                  {!sidebarOpen && (
-                    <button
-                      onClick={() => setSidebarOpen(true)}
-                      className="hidden md:flex items-center gap-1 text-[11px] text-[#64748b] hover:text-white bg-[#13141b] border border-[#1f212c] px-2 py-0.5 rounded-md transition cursor-pointer"
-                    >
-                      <PanelLeft className="w-3 h-3 text-[#ff2442]" />
-                      <span>Show Sidebar</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Mode toggle pills */}
-                <div className="flex items-center bg-[#121319] p-0.5 rounded-lg border border-[#1f212b]">
-                  <button
-                    onClick={() => setViewMode('split')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-semibold text-xs transition cursor-pointer ${
-                      viewMode === 'split'
-                        ? 'border border-[#ff2442] text-white bg-[#220c11]'
-                        : 'text-[#64748b] hover:text-[#cbd5e1]'
-                    }`}
-                  >
-                    <Columns2 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Split View</span>
-                  </button>
-
-                  <button
-                    onClick={() => setViewMode('notes')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-semibold text-xs transition cursor-pointer ${
-                      viewMode === 'notes'
-                        ? 'border border-[#ff2442] text-white bg-[#220c11]'
-                        : 'text-[#64748b] hover:text-[#cbd5e1]'
-                    }`}
-                    title="Full screen notes access"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Full Screen Notes</span>
-                  </button>
-
-                  <button
-                    onClick={() => setViewMode('chat')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-semibold text-xs transition cursor-pointer ${
-                      viewMode === 'chat'
-                        ? 'border border-[#ff2442] text-white bg-[#220c11]'
-                        : 'text-[#64748b] hover:text-[#cbd5e1]'
-                    }`}
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Chat ({activeChat.messages.length})</span>
-                  </button>
-                </div>
+            /* Active Notes & Chat View: Panes start directly under TopNav with zero wasted space! */
+            <div className="h-full flex overflow-hidden relative">
+              {/* Notes Pane */}
+              <div
+                className={`h-full overflow-hidden transition-all duration-200 ${
+                  viewMode === 'split'
+                    ? 'w-full lg:w-[60%] block'
+                    : viewMode === 'notes'
+                    ? 'w-full block'
+                    : 'hidden'
+                }`}
+              >
+                <NotesViewer chat={activeChat} />
               </div>
 
-              {/* Panes Container with Full Screen flexibility */}
-              <div className="flex-1 flex overflow-hidden relative">
-                {/* Notes Pane */}
-                <div
-                  className={`h-full overflow-hidden transition-all duration-200 ${
-                    viewMode === 'split'
-                      ? 'w-full lg:w-[60%] block'
-                      : viewMode === 'notes'
-                      ? 'w-full block'
-                      : 'hidden'
-                  }`}
-                >
-                  <NotesViewer chat={activeChat} />
-                </div>
-
-                {/* Chat Pane */}
-                <div
-                  className={`h-full overflow-hidden transition-all duration-200 ${
-                    viewMode === 'split'
-                      ? 'w-full lg:w-[40%] block border-l border-[#171820]'
-                      : viewMode === 'chat'
-                      ? 'w-full block'
-                      : 'hidden'
-                  }`}
-                >
-                  <ChatBox
-                    chatId={activeChat.id}
-                    videoTitle={activeChat.title}
-                    messages={activeChat.messages}
-                    onSendMessage={handleSendChatMessage}
-                    isSending={isSendingChat}
-                    onCloseChat={() => setViewMode('notes')}
-                    onMaximizeChat={() => setViewMode(viewMode === 'chat' ? 'split' : 'chat')}
-                    isMaximized={viewMode === 'chat'}
-                  />
-                </div>
-
-                {/* Floating Open Chat button when Notes are in Full Screen mode */}
-                {viewMode === 'notes' && (
-                  <button
-                    onClick={() => setViewMode('split')}
-                    className="absolute bottom-6 right-6 px-4 py-2.5 bg-[#ff2442] hover:bg-[#e61b36] text-white rounded-xl shadow-xl shadow-red-950/70 font-bold text-xs flex items-center gap-2 border border-red-500/40 transition hover:scale-105 active:scale-95 cursor-pointer z-10"
-                    title="Open side chat assistant"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    <span>Open Chat ({activeChat.messages.length})</span>
-                  </button>
-                )}
+              {/* Chat Pane */}
+              <div
+                className={`h-full overflow-hidden transition-all duration-200 ${
+                  viewMode === 'split'
+                    ? 'w-full lg:w-[40%] block border-l border-[#171820]'
+                    : viewMode === 'chat'
+                    ? 'w-full block'
+                    : 'hidden'
+                }`}
+              >
+                <ChatBox
+                  chatId={activeChat.id}
+                  videoTitle={activeChat.title}
+                  messages={activeChat.messages}
+                  onSendMessage={handleSendChatMessage}
+                  isSending={isSendingChat}
+                  onCloseChat={() => setViewMode('notes')}
+                  onMaximizeChat={() => setViewMode(viewMode === 'chat' ? 'split' : 'chat')}
+                  isMaximized={viewMode === 'chat'}
+                />
               </div>
+
+              {/* Floating Open Chat button when Notes are in Full Screen mode */}
+              {viewMode === 'notes' && (
+                <button
+                  onClick={() => setViewMode('split')}
+                  className="absolute bottom-6 right-6 px-4 py-2.5 bg-[#ff2442] hover:bg-[#e61b36] text-white rounded-xl shadow-xl shadow-red-950/70 font-bold text-xs flex items-center gap-2 border border-red-500/40 transition hover:scale-105 active:scale-95 cursor-pointer z-10"
+                  title="Open side chat assistant"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Open Chat ({activeChat.messages.length})</span>
+                </button>
+              )}
             </div>
           ) : (
             /* Home / Hero View */

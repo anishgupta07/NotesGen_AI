@@ -54,10 +54,16 @@ def format_docs(docs) -> str:
     return "\n\n".join([doc.page_content for doc in docs])
 
 
-def query_isolated_rag(chat_id: str, question: str, video_title: str, recent_history: list = None) -> str:
-    """Query the isolated RAG engine with strict topic guardrails."""
+def query_isolated_rag(
+    chat_id: str,
+    question: str,
+    video_title: str,
+    language: str = "english",
+    recent_history: list = None
+) -> str:
+    """Query the isolated RAG engine with strict topic guardrails, speaker analogy preservation, and Hinglish fidelity."""
     vector_store = load_isolated_vector_store(chat_id)
-    retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+    retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
     llm = get_llm(temperature=0.2)
 
     history_context = ""
@@ -65,15 +71,23 @@ def query_isolated_rag(chat_id: str, question: str, video_title: str, recent_his
         history_lines = [f"{m['role'].capitalize()}: {m['content']}" for m in recent_history[-4:]]
         history_context = "Recent Conversation:\n" + "\n".join(history_lines) + "\n\n"
 
-    system_prompt = f"""You are an expert AI tutor strictly dedicated to the video: "{video_title}".
+    lang_rule = (
+        "5. STRICT HINGLISH: The session language is 'hinglish'. You MUST explain the answers in natural, fluent Hinglish (Hindi written in Roman/English alphabet, e.g., 'Video mein sir ne bataya ki...', 'Iska intuition yeh hai...'). Keep technical terms in English, but write sentences in conversational Roman Hindi. DO NOT answer in pure English!"
+        if language.lower() in ["hinglish", "hindi"]
+        else "5. LANGUAGE: Provide clear, professional answers in English."
+    )
+
+    system_prompt = f"""You are an expert AI tutor strictly dedicated to the educational video: "{video_title}".
 Your job is to answer user questions using ONLY the video transcript context provided below.
 
-CRITICAL GUARDRAIL RULES:
+CRITICAL GUARDRAIL & TUTOR RULES:
 1. TOPIC RESTRICTION: You must ONLY answer questions that are directly related to "{video_title}" and its transcript content.
 2. STRICT REFUSAL: If the user asks about ANY topic outside this video (including general trivia, other academic subjects, off-topic coding questions, cooking, jokes, or general AI queries not covered in this video), you MUST refuse politely:
    "I can only answer questions related to this video on '{video_title}'. Please ask a question about this topic."
 3. GROUNDING: Do not hallucinate. If the user asks about something from this video that was not mentioned in the transcript, say clearly: "This detail was not mentioned in the video."
-4. LANGUAGE MATCH: If the user asks in Hinglish, reply in clear Hinglish. If in English, reply in English.
+4. SPEAKER'S EXACT ANALOGIES: When explaining any concept, solution, or intuition, you MUST use the EXACT analogies, metaphors, and real-world examples given by the speaker in the video rather than textbook definitions.
+{lang_rule}
+6. TIMELINE AWARENESS: If the user asks what happens in a specific timeline (e.g., '0:00 - 5:00' or 'at 03:45'), locate the relevant timestamped chunks and summarize that portion.
 
 Video Title: {video_title}
 {history_context}Transcript Context:
@@ -96,3 +110,4 @@ Video Title: {video_title}
     )
 
     return rag_chain.invoke(question)
+

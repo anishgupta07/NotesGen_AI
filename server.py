@@ -16,11 +16,15 @@ from core.db import (
     add_message,
     delete_chat,
 )
-from core.youtube_helper import get_youtube_transcript_with_timestamps
+from core.youtube_helper import (
+    get_youtube_transcript_with_timestamps,
+    filter_transcript_by_timeline,
+)
 from core.audio_processor import process_input
 from core.transcriber import transcribe_all
 from core.summarizer import generate_title
 from core.notes_generator import generate_video_notes
+from core.guardrail import check_video_educational
 from rag.isolated_engine import (
     build_isolated_vector_store,
     query_isolated_rag,
@@ -45,8 +49,11 @@ app.add_middleware(
 # ─── Pydantic Schemas ───────────────────────────────────────────────────────────
 class GenerateNotesRequest(BaseModel):
     url: str
-    language: str = "hinglish"      # "hinglish" or "english"
-    style: str = "study_guide"       # "study_guide", "cornell", "cheatsheet"
+    language: str = "hinglish"          # "hinglish" or "english"
+    style: str = "detailed"             # "detailed" or "cheatsheet"
+    timeline_mode: str = "full"         # "full" or "custom"
+    start_time: Optional[str] = None    # e.g. "00:00"
+    end_time: Optional[str] = None      # e.g. "05:00"
 
 
 class ChatMessageRequest(BaseModel):
@@ -67,7 +74,7 @@ def list_chats():
 
 @app.post("/api/generate-notes")
 def api_generate_notes(req: GenerateNotesRequest):
-    """Fetch transcript, generate structured notes, persist to DB, and initialize isolated vector store."""
+    """Fetch transcript, run educational guardrail, filter timeline if requested, generate notes, and initialize vector store."""
     url = req.url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="Please provide a valid YouTube URL.")
@@ -95,16 +102,37 @@ def api_generate_notes(req: GenerateNotesRequest):
             detail="Could not retrieve transcript from the provided video."
         )
 
-    # 3. Generate concise Title
-    try:
-        title = generate_title(transcript)
-    except Exception:
-        title = "YouTube Video Notes"
+    # 3. Educational & Academic Guardrail Layer
+    is_educational, guardrail_msg = check_video_educational(transcript, title=url)
+    if not is_educational:
+        raise HTTPException(
+            status_code=400,
+            detail=guardrail_msg
+        )
 
-    # 4. Generate Structured Notes
+    # 4. Timeline Range Filtering (if custom timeline specified)
+    transcript_to_process = transcript
+    timeline_suffix = ""
+    if req.timeline_mode == "custom" and (req.start_time or req.end_time):
+        filtered = filter_transcript_by_timeline(transcript, req.start_time, req.end_time)
+        if not filtered.strip():
+            raise HTTPException(
+                status_code=400,
+                detail=f"No transcript found for timeline range [{req.start_time or '00:00'} - {req.end_time or 'end'}]. Please check video timestamps."
+            )
+        transcript_to_process = filtered
+        timeline_suffix = f" [{req.start_time or '00:00'} - {req.end_time or 'end'}]"
+
+    # 5. Generate concise Title
+    try:
+        title = generate_title(transcript_to_process) + timeline_suffix
+    except Exception:
+        title = f"YouTube Notes{timeline_suffix}"
+
+    # 6. Generate Structured Notes (Detailed Notes or Cheat Sheet with speaker's analogies)
     try:
         notes = generate_video_notes(
-            transcript=transcript,
+            transcript=transcript_to_process,
             style=req.style,
             language=req.language
         )
@@ -114,19 +142,19 @@ def api_generate_notes(req: GenerateNotesRequest):
             detail=f"Error generating notes: {str(e)}"
         )
 
-    # 5. Save session in SQLite
+    # 7. Save session in SQLite
     chat = create_chat(
         title=title,
         video_url=url,
         language=req.language,
         note_style=req.style,
         notes=notes,
-        transcript=transcript,
+        transcript=transcript_to_process,
     )
 
-    # 6. Build isolated vector store in background for RAG chat
+    # 8. Build isolated vector store for RAG chat
     try:
-        build_isolated_vector_store(chat["id"], transcript)
+        build_isolated_vector_store(chat["id"], transcript_to_process)
     except Exception as e:
         print(f"Warning: vector store build error: {e}")
 
@@ -156,12 +184,14 @@ def api_ask_question(chat_id: str, req: ChatMessageRequest):
     # Record user message in DB
     user_msg = add_message(chat_id, "user", question)
 
-    # Query topic-isolated RAG engine
+    # Query topic-isolated RAG engine with language and video title
+    chat_lang = chat.get("language", "english")
     try:
         answer = query_isolated_rag(
             chat_id=chat_id,
             question=question,
             video_title=chat["title"],
+            language=chat_lang,
             recent_history=chat.get("messages", []),
         )
     except Exception as e:
@@ -174,6 +204,7 @@ def api_ask_question(chat_id: str, req: ChatMessageRequest):
         "user_message": user_msg,
         "assistant_message": bot_msg,
     }
+
 
 
 @app.delete("/api/chats/{chat_id}")

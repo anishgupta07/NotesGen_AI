@@ -4,66 +4,68 @@ from langchain_core.prompts import ChatPromptTemplate
 def get_language_instruction(language: str = "english") -> str:
     """Return strict, unambiguous language instructions."""
     if language.lower() in ["hinglish", "hindi"]:
-        return """CRITICAL LANGUAGE REQUIREMENT — STRICT HINGLISH:
-- You MUST write the ENTIRE notes, explanations, questions, intuition, solutions, and summaries in natural, conversational HINGLISH (Hindi written in the Roman / Latin alphabet).
-- Tone & Style Example:
-  "Video mein instructor ne samjhaya ki recursion ka basic concept yeh hai ki jab ek function apne aap ko call karta hai jab tak base case hit na ho jaye. Isko visually samajhne ke liye sir ne Russian dolls ka example diya: har doll ke andar ek choti doll hoti hai aur aakhri sabse choti doll base case hoti hai..."
-- Rules for Hinglish:
-  1. ALL sentences, explanations, intuition, and summaries MUST be in Roman Hindi (Hinglish).
-  2. Keep technical programming / academic terms in English (e.g., 'Binary Search Tree', 'Time Complexity', 'Recursion', 'Stack Overflow', 'Base Case', 'Pointers').
-  3. Headings can be in English/Hinglish with emojis.
-  4. DO NOT write paragraphs in pure English when Hinglish is chosen. Pure English output is strictly forbidden!"""
+        return """CRITICAL LANGUAGE REQUIREMENT — SIMPLE & FLOWING HINGLISH:
+- Write the notes in SIMPLE, NATURAL, CONVERSATIONAL HINGLISH (Hindi written in Roman / English alphabet).
+- Tone should be like a friendly, expert teacher explaining step-by-step on YouTube:
+  "Video ki shuruat mein instructor ne explain kiya ki recursion ka simple matlab hota hai function apne aap ko call karta hai... Isko samajhne ke liye sir ne Russian dolls ka bohot badhiya example diya..."
+- Rules:
+  1. Sentences should flow smoothly without robotic jargon.
+  2. Keep technical terms in English (e.g. 'Binary Search', 'Time Complexity', 'Recursion', 'Base Case', 'Loop', 'Variables').
+  3. All explanations, examples, stories, and summaries MUST be in simple Roman Hindi.
+  4. DO NOT write paragraphs in pure English when Hinglish is chosen."""
 
-    return """CRITICAL LANGUAGE REQUIREMENT — PROFESSIONAL ENGLISH:
-- Write the entire notes in crisp, clear, academic English."""
+    return """CRITICAL LANGUAGE REQUIREMENT — CLEAR ACADEMIC ENGLISH:
+- Write the notes in clear, easy-to-understand, flowing academic English with smooth narrative progression."""
 
 
-# 1. Detailed Notes Prompt (Timeline-Wise)
+# 1. Detailed Notes Prompt (Flowing narrative, Topic Headings, Speaker Analogies & Note Down points)
 DETAILED_NOTES_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are an elite academic tutor creating high-yield, structured student study notes from a YouTube video transcript.
+        """You are a master academic teacher creating beautifully readable, student-friendly study notes from a YouTube video transcript.
 
 {language_instruction}
 
-CRITICAL REQUIREMENT 1 — SPEAKER'S EXACT ANALOGIES & METAPHORS:
-- You MUST identify, extract, and use the EXACT analogies, real-world stories, metaphors, and mental models used by the speaker in the video.
-- DO NOT substitute the instructor's analogies with generic textbook definitions. If the speaker explains a concept using a real-world scenario (e.g., a restaurant kitchen, a book shelf, a traffic light, Russian dolls, a box, a postman), you MUST highlight and use that exact analogy in the Concepts, Solutions, and Intuition sections!
+CORE PRINCIPLES FOR MAXIMUM READABILITY:
+1. NATURAL FLOW & EASY EXPLANATION:
+   - Present concepts in a smooth chronological flow from beginning to end.
+   - Break down tough topics into simple words so anyone can understand quickly.
 
-CRITICAL REQUIREMENT 2 — TIMELINE-WISE BREAKDOWN & CRISP LENGTH:
-- Do NOT write a giant wall of text. Notes should be concise, structured, and easy to study.
-- Organize the notes into chronological timeline blocks of roughly 3 to 7 minutes (e.g., `⏱️ 0:00 - 05:00`, `⏱️ 05:00 - 11:30`, etc., or matching the natural topic intervals in the transcript).
-- If the transcript covers a specific user-defined range, focus solely on that range.
+2. TOPIC AS HEADING THEN CONTENT:
+   - For every section, use a clear, bold Heading with the timestamp and topic name.
+   - Under each heading, provide the full explanation, followed by key note-down points.
 
-FOR EACH TIMELINE BLOCK, FOLLOW THIS EXACT STRUCTURE:
+3. PRESERVE SPEAKER'S EXACT ANALOGIES & REAL EXAMPLES:
+   - You MUST extract and use the EXACT real-world analogies, metaphors, and stories used by the instructor in the video (e.g. Russian dolls, a kitchen chef, a train compartment, a library shelf, traffic signals).
+   - Anchor the explanation to that exact example.
 
-### ⏱️ Timeline: [Start MM:SS] - [End MM:SS] — [Topic / Segment Name]
+4. DEDICATED 'POINTS TO NOTE DOWN':
+   - Students want to copy key takeaways into their notebooks. Include clear, high-yield bullet points for quick note-taking and exam revision.
 
-- **💡 Concepts**:
-  - Key concept(s) explained in this timeframe.
-  - Core definitions and rules.
+STRUCTURE EACH TIMELINE CHAPTER AS FOLLOWS:
 
-- **❓ Questions**:
-  - What question, challenge, or problem was raised or addressed in this timestamp range?
+## ⏱️ [MM:SS - MM:SS] [Clear Topic Name]
 
-- **📝 Solutions & Explanations**:
-  - Step-by-step explanation of how the speaker solved or explained the concept.
-  - MUST include the speaker's EXACT analogy/story from the video.
+### 📖 Concept Explanation (In Simple Flow)
+(Provide a smooth, easy-to-understand explanation of what was taught in this timeframe. Walk through the concept step-by-step, explaining the logic clearly.)
 
-- **🧠 Intuition**:
-  - The underlying mental model and intuition of WHY this works (grounded in the speaker's analogy).
+> 💡 **Instructor's Real Example & Analogy:**
+> (The exact real-world analogy, story, or diagram used by the teacher in the video to explain this concept.)
 
-- **📌 Summary**:
-  - 2-3 lines quick summary of this segment.
+### 📌 Important Points to Note Down
+- **Key Concept**: (Main definition or rule to remember)
+- **Why It Matters**: (Why this logic is used and how it works)
+- **Common Mistake to Avoid**: (Pitfall or warning mentioned by the speaker)
 
-- **🎯 Practice Questions**:
-  - 1-2 targeted questions to test understanding of this section.
+### ❓ Problem / Question Discussed in Video
+- **Question**: (The challenge or coding/academic question raised in this segment)
+- **Solution & Intuition**: (How the instructor solved it step-by-step using the video's intuition)
 
-- **🔑 Revision Tips**:
-  - 2 quick bullet points or memory hooks for fast recall.
+### 🎯 Quick Practice Question
+- (1 targeted self-test question based on this topic with a quick hint/answer)
 
 ---
-(Repeat for each timeline block until the covered section is complete.)
+(Repeat this clean heading-and-content structure for each timeline block until the video ends.)
 """,
     ),
     ("human", "Transcript with timestamps:\n\n{text}"),
@@ -74,33 +76,34 @@ FOR EACH TIMELINE BLOCK, FOLLOW THIS EXACT STRUCTURE:
 CHEATSHEET_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are an expert tutor creating a high-yield Cheat Sheet from a YouTube video transcript.
+        """You are an expert tutor creating a high-yield, quick-revision Cheat Sheet from a YouTube video transcript.
 
 {language_instruction}
 
-CRITICAL REQUIREMENT — SPEAKER'S EXACT ANALOGIES:
-- Incorporate the instructor's exact real-world analogies, metaphors, and examples into the explanations and solutions.
+CORE PRINCIPLES:
+- Topic as heading, followed by concise, high-yield content.
+- Include the instructor's exact real-world analogies and formulas.
+- Maximum readability and bullet points ready to note down.
 
-CRITICAL REQUIREMENT — HIGH YIELD & CONCISE:
-- Provide maximum value with zero fluff. Every bullet point should be actionable and memorable.
-
-STRUCTURE THE CHEAT SHEET EXACTLY AS FOLLOWS:
+STRUCTURE THE CHEAT SHEET AS FOLLOWS:
 
 # ⚡ Quick Revision Cheat Sheet: [Topic / Video Title]
 
-## 📌 Full Video Important Points
-- Core concepts, definitions, formulas, and rules across the entire video.
-- Include the instructor's main real-world analogies summarized in concise bullet points.
+## 📌 Full Video Important Points (To Note Down)
+- Bulleted list of all critical formulas, rules, and core concepts taught across the entire video.
+- Bold key terminology and state definitions concisely.
 
-## ❓ Questions with Solutions
-- The most important questions or problems addressed throughout the video.
-- Crisp step-by-step solutions explained using the speaker's actual analogies.
+## 💡 Instructor's Core Analogies & Mental Models
+- Summary of the main real-world analogies used by the speaker to make abstract ideas intuitive.
 
-## 🎯 Practice Questions
-- 3 to 4 high-yield practice questions to test complete mastery, along with brief hints/answers.
+## ❓ Common Questions with Step-by-Step Solutions
+- The most important questions/problems from the video answered concisely with direct logic.
 
-## 🔑 Revision Tips & Key Formulas / Rules
-- Rapid-fire memory checklist for quick last-minute review.
+## 🎯 High-Yield Practice Questions
+- 3 to 4 exam/interview practice questions covering the video's essential concepts with quick answers.
+
+## 🔑 60-Second Revision Checklist
+- Rapid-fire memory tips and key takeaways for fast last-minute recall.
 """,
     ),
     ("human", "Transcript with timestamps:\n\n{text}"),

@@ -21,7 +21,6 @@ import {
   FileText,
   MessageSquare,
   ArrowLeft,
-  Maximize2,
   PanelLeft,
 } from 'lucide-react';
 
@@ -38,7 +37,7 @@ export const App: React.FC = () => {
 
   // View mode when a chat is open: 'split' | 'notes' | 'chat'
   const [viewMode, setViewMode] = useState<'split' | 'notes' | 'chat'>('split');
-  // Sidebar state: open by default on desktop, collapsible for 100% full screen
+  // Sidebar state: open by default on desktop, collapsible for full screen
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Load chat history on initial mount
@@ -173,7 +172,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0b0c0e] text-[#e2e8f0] font-sans antialiased">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#090a0c] text-[#f1f3f7] font-['Plus_Jakarta_Sans',sans-serif] antialiased">
       {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
         <div
@@ -199,7 +198,7 @@ export const App: React.FC = () => {
       </div>
 
       {/* Main Content Workspace */}
-      <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden bg-[#0b0c0e]">
+      <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden bg-[#090a0c]">
         {/* Top Navigation */}
         <TopNav
           isSidebarOpen={sidebarOpen}
@@ -209,14 +208,14 @@ export const App: React.FC = () => {
 
         {/* Global Error Banner */}
         {errorMessage && (
-          <div className="mx-6 mt-3 p-3 bg-[#201015] border border-[#481c25] text-rose-300 rounded-xl text-xs md:text-sm flex items-center justify-between gap-3 shadow-lg shrink-0 animate-in fade-in duration-200">
+          <div className="mx-6 mt-3 p-3 bg-[#240c11] border border-[#4d1620] text-rose-300 rounded-xl text-xs md:text-sm flex items-center justify-between gap-3 shadow-lg shrink-0 animate-in fade-in duration-200">
             <div className="flex items-center gap-2 min-w-0">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <AlertCircle className="w-4 h-4 text-[#ff2442] shrink-0" />
               <span className="font-medium truncate">{errorMessage}</span>
             </div>
             <button
               onClick={() => setErrorMessage(null)}
-              className="text-rose-400 hover:text-rose-200 p-1 cursor-pointer shrink-0"
+              className="text-[#ff4d66] hover:text-white p-1 cursor-pointer shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -228,36 +227,36 @@ export const App: React.FC = () => {
           {isGenerating ? (
             /* Loading State while generating notes */
             <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-5 animate-in fade-in duration-300">
-              <div className="w-14 h-14 rounded-2xl bg-[#191629] text-purple-400 border border-[#312550] flex items-center justify-center shadow-2xl shadow-purple-950/60">
+              <div className="w-14 h-14 rounded-2xl bg-[#200c12] text-[#ff2442] border border-[#3d151f] flex items-center justify-center shadow-2xl shadow-red-950/60">
                 <Loader2 className="w-7 h-7 animate-spin" />
               </div>
               <div className="space-y-1.5 max-w-md">
                 <h2 className="text-xl font-extrabold text-white tracking-tight">
                   Generating Study Notes...
                 </h2>
-                <p className="text-xs md:text-sm text-[#94a3b8] leading-relaxed">
+                <p className="text-xs md:text-sm text-[#848c9c] leading-relaxed">
                   Checking educational guardrail, structuring timeline flow, extracting instructor's real analogies, and compiling key points to note down.
                 </p>
               </div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-purple-300 bg-[#171424] border border-[#2d214a] px-3.5 py-1.5 rounded-full">
-                <Sparkles className="w-3.5 h-3.5 animate-pulse text-purple-400" />
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#ff4d66] bg-[#1a0b10] border border-[#35141c] px-3.5 py-1.5 rounded-full">
+                <Sparkles className="w-3.5 h-3.5 animate-pulse text-[#ff2442]" />
                 <span>Powered by Groq High-Speed Inference</span>
               </div>
             </div>
           ) : isLoadingDetail ? (
             /* Loading State when loading an existing chat */
             <div className="h-full flex items-center justify-center">
-              <Loader2 className="w-7 h-7 animate-spin text-purple-400" />
+              <Loader2 className="w-7 h-7 animate-spin text-[#ff2442]" />
             </div>
           ) : activeChat ? (
             /* Active Chat View (Split View / Full-Screen Notes / Full-Screen Chat) */
             <div className="h-full flex flex-col">
               {/* Sub-header view switcher bar matching dark aesthetic */}
-              <div className="px-5 py-2 border-b border-[#181a20] bg-[#0d0e12] flex items-center justify-between text-xs shrink-0">
+              <div className="px-5 py-2 border-b border-[#171820] bg-[#0b0c0f] flex items-center justify-between text-xs shrink-0">
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleNewChat}
-                    className="flex items-center gap-1.5 text-[#94a3b8] hover:text-white font-medium transition cursor-pointer"
+                    className="flex items-center gap-1.5 text-[#848c9c] hover:text-white font-semibold transition cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
                     <span>New Video</span>
@@ -266,21 +265,21 @@ export const App: React.FC = () => {
                   {!sidebarOpen && (
                     <button
                       onClick={() => setSidebarOpen(true)}
-                      className="hidden md:flex items-center gap-1 text-[11px] text-[#64748b] hover:text-white bg-[#15161d] border border-[#232532] px-2 py-0.5 rounded-md transition cursor-pointer"
+                      className="hidden md:flex items-center gap-1 text-[11px] text-[#64748b] hover:text-white bg-[#13141b] border border-[#1f212c] px-2 py-0.5 rounded-md transition cursor-pointer"
                     >
-                      <PanelLeft className="w-3 h-3 text-purple-400" />
+                      <PanelLeft className="w-3 h-3 text-[#ff2442]" />
                       <span>Show Sidebar</span>
                     </button>
                   )}
                 </div>
 
                 {/* Mode toggle pills */}
-                <div className="flex items-center bg-[#13141a] p-0.5 rounded-lg border border-[#22242c]">
+                <div className="flex items-center bg-[#121319] p-0.5 rounded-lg border border-[#1f212b]">
                   <button
                     onClick={() => setViewMode('split')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium text-xs transition cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-semibold text-xs transition cursor-pointer ${
                       viewMode === 'split'
-                        ? 'bg-[#222532] text-white shadow-xs'
+                        ? 'border border-[#ff2442] text-white bg-[#220c11]'
                         : 'text-[#64748b] hover:text-[#cbd5e1]'
                     }`}
                   >
@@ -290,9 +289,9 @@ export const App: React.FC = () => {
 
                   <button
                     onClick={() => setViewMode('notes')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium text-xs transition cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-semibold text-xs transition cursor-pointer ${
                       viewMode === 'notes'
-                        ? 'bg-[#222532] text-white shadow-xs'
+                        ? 'border border-[#ff2442] text-white bg-[#220c11]'
                         : 'text-[#64748b] hover:text-[#cbd5e1]'
                     }`}
                     title="Full screen notes access"
@@ -303,9 +302,9 @@ export const App: React.FC = () => {
 
                   <button
                     onClick={() => setViewMode('chat')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium text-xs transition cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-semibold text-xs transition cursor-pointer ${
                       viewMode === 'chat'
-                        ? 'bg-[#222532] text-white shadow-xs'
+                        ? 'border border-[#ff2442] text-white bg-[#220c11]'
                         : 'text-[#64748b] hover:text-[#cbd5e1]'
                     }`}
                   >
@@ -334,7 +333,7 @@ export const App: React.FC = () => {
                 <div
                   className={`h-full overflow-hidden transition-all duration-200 ${
                     viewMode === 'split'
-                      ? 'w-full lg:w-[40%] block border-l border-[#181a22]'
+                      ? 'w-full lg:w-[40%] block border-l border-[#171820]'
                       : viewMode === 'chat'
                       ? 'w-full block'
                       : 'hidden'
@@ -356,7 +355,7 @@ export const App: React.FC = () => {
                 {viewMode === 'notes' && (
                   <button
                     onClick={() => setViewMode('split')}
-                    className="absolute bottom-6 right-6 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-95 text-white rounded-xl shadow-xl shadow-purple-950/70 font-semibold text-xs flex items-center gap-2 border border-purple-500/30 transition hover:scale-105 active:scale-95 cursor-pointer z-10"
+                    className="absolute bottom-6 right-6 px-4 py-2.5 bg-[#ff2442] hover:bg-[#e61b36] text-white rounded-xl shadow-xl shadow-red-950/70 font-bold text-xs flex items-center gap-2 border border-red-500/40 transition hover:scale-105 active:scale-95 cursor-pointer z-10"
                     title="Open side chat assistant"
                   >
                     <MessageSquare className="w-4 h-4" />

@@ -46,3 +46,53 @@ def get_youtube_transcript_with_timestamps(url: str) -> str | None:
     except Exception as e:
         print(f"Direct YouTube subtitle fetch failed ({e}). Falling back to audio Whisper transcription...")
         return None
+
+
+def parse_time_str_to_seconds(time_str: str) -> int:
+    """Parse 'MM:SS', 'HH:MM:SS', or total seconds into integer seconds."""
+    if not time_str:
+        return 0
+    clean = time_str.strip().strip("[]()")
+    parts = clean.split(":")
+    try:
+        if len(parts) == 1:
+            return int(float(parts[0]))
+        elif len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
+        elif len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    except ValueError:
+        return 0
+    return 0
+
+
+def filter_transcript_by_timeline(transcript: str, start_time: str | None = None, end_time: str | None = None) -> str:
+    """Filter transcript lines to only those falling between start_time and end_time."""
+    if not start_time and not end_time:
+        return transcript
+
+    start_sec = parse_time_str_to_seconds(start_time) if start_time else 0
+    end_sec = parse_time_str_to_seconds(end_time) if end_time else float('inf')
+
+    if end_sec <= start_sec:
+        end_sec = float('inf')
+
+    lines = transcript.splitlines()
+    filtered_lines = []
+    timestamp_pattern = re.compile(r"^\[(?:(\d+):)?(\d+):(\d+)\]")
+
+    for line in lines:
+        match = timestamp_pattern.match(line.strip())
+        if match:
+            h, m, s = match.groups()
+            line_sec = (int(h) * 3600 if h else 0) + int(m) * 60 + int(s)
+            if start_sec <= line_sec <= end_sec:
+                filtered_lines.append(line)
+        else:
+            if filtered_lines:
+                filtered_lines.append(line)
+
+    if not filtered_lines:
+        return transcript
+
+    return "\n".join(filtered_lines)

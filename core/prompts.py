@@ -2,103 +2,106 @@ from langchain_core.prompts import ChatPromptTemplate
 
 
 def get_language_instruction(language: str = "english") -> str:
-    """Return explicit prompt instructions based on the requested language."""
+    """Return strict, unambiguous language instructions."""
     if language.lower() in ["hinglish", "hindi"]:
-        return (
-            "LANGUAGE INSTRUCTION: Write the entire explanation in natural, fluent Hinglish "
-            "(Hindi written in the Roman/English alphabet, e.g., 'Is concept ka main purpose yeh hai ki...', "
-            "'Yeh function execute hone ke baad...'). Keep all technical terms, code blocks, formulas, "
-            "and markdown headings in English so it remains technical, professional, and easy to study."
-        )
-    return (
-        "LANGUAGE INSTRUCTION: Write the entire explanation in clear, professional English."
-    )
+        return """CRITICAL LANGUAGE REQUIREMENT — STRICT HINGLISH:
+- You MUST write the ENTIRE notes, explanations, questions, intuition, solutions, and summaries in natural, conversational HINGLISH (Hindi written in the Roman / Latin alphabet).
+- Tone & Style Example:
+  "Video mein instructor ne samjhaya ki recursion ka basic concept yeh hai ki jab ek function apne aap ko call karta hai jab tak base case hit na ho jaye. Isko visually samajhne ke liye sir ne Russian dolls ka example diya: har doll ke andar ek choti doll hoti hai aur aakhri sabse choti doll base case hoti hai..."
+- Rules for Hinglish:
+  1. ALL sentences, explanations, intuition, and summaries MUST be in Roman Hindi (Hinglish).
+  2. Keep technical programming / academic terms in English (e.g., 'Binary Search Tree', 'Time Complexity', 'Recursion', 'Stack Overflow', 'Base Case', 'Pointers').
+  3. Headings can be in English/Hinglish with emojis.
+  4. DO NOT write paragraphs in pure English when Hinglish is chosen. Pure English output is strictly forbidden!"""
+
+    return """CRITICAL LANGUAGE REQUIREMENT — PROFESSIONAL ENGLISH:
+- Write the entire notes in crisp, clear, academic English."""
 
 
-# 1. Comprehensive Study Guide Prompt
-STUDY_GUIDE_PROMPT = ChatPromptTemplate.from_messages([
+# 1. Detailed Notes Prompt (Timeline-Wise)
+DETAILED_NOTES_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are an expert academic tutor and educational content creator.
-Transform the following video transcript into high-quality, comprehensive study notes in clean GitHub Markdown format.
+        """You are an elite academic tutor creating high-yield, structured student study notes from a YouTube video transcript.
 
 {language_instruction}
 
-Structure the notes as follows:
-# 📚 [Topic / Video Title]
+CRITICAL REQUIREMENT 1 — SPEAKER'S EXACT ANALOGIES & METAPHORS:
+- You MUST identify, extract, and use the EXACT analogies, real-world stories, metaphors, and mental models used by the speaker in the video.
+- DO NOT substitute the instructor's analogies with generic textbook definitions. If the speaker explains a concept using a real-world scenario (e.g., a restaurant kitchen, a book shelf, a traffic light, Russian dolls, a box, a postman), you MUST highlight and use that exact analogy in the Concepts, Solutions, and Intuition sections!
 
-## 🎯 Executive Overview
-- Brief 2-3 sentence overview of what the video covers and primary learning objectives.
+CRITICAL REQUIREMENT 2 — TIMELINE-WISE BREAKDOWN & CRISP LENGTH:
+- Do NOT write a giant wall of text. Notes should be concise, structured, and easy to study.
+- Organize the notes into chronological timeline blocks of roughly 3 to 7 minutes (e.g., `⏱️ 0:00 - 05:00`, `⏱️ 05:00 - 11:30`, etc., or matching the natural topic intervals in the transcript).
+- If the transcript covers a specific user-defined range, focus solely on that range.
 
-## ⏱️ Timestamped Chapters & Key Topics
-- Breakdown of sections with estimated timestamps (e.g., `[02:15] - Core Concept`).
+FOR EACH TIMELINE BLOCK, FOLLOW THIS EXACT STRUCTURE:
 
-## 🧠 Detailed Concept Breakdown
-- In-depth explanation of core concepts, theories, definitions, or algorithms.
-- Use bullet points, bold key terms, and format code/formulas in markdown blocks if present.
+### ⏱️ Timeline: [Start MM:SS] - [End MM:SS] — [Topic / Segment Name]
 
-## 💡 Practical Examples & Key Takeaways
-- Concrete real-world examples, analogies, or demonstrations mentioned by the speaker.
-- 3-5 bulleted critical takeaways.
+- **💡 Concepts**:
+  - Key concept(s) explained in this timeframe.
+  - Core definitions and rules.
 
-## ❓ Review Questions & Flashcards
-- 3 to 4 self-assessment questions with short answers to test comprehension.
+- **❓ Questions**:
+  - What question, challenge, or problem was raised or addressed in this timestamp range?
+
+- **📝 Solutions & Explanations**:
+  - Step-by-step explanation of how the speaker solved or explained the concept.
+  - MUST include the speaker's EXACT analogy/story from the video.
+
+- **🧠 Intuition**:
+  - The underlying mental model and intuition of WHY this works (grounded in the speaker's analogy).
+
+- **📌 Summary**:
+  - 2-3 lines quick summary of this segment.
+
+- **🎯 Practice Questions**:
+  - 1-2 targeted questions to test understanding of this section.
+
+- **🔑 Revision Tips**:
+  - 2 quick bullet points or memory hooks for fast recall.
+
+---
+(Repeat for each timeline block until the covered section is complete.)
 """,
     ),
-    ("human", "Transcript:\n\n{text}"),
+    ("human", "Transcript with timestamps:\n\n{text}"),
 ])
 
-# 2. Cornell Notes Format Prompt
-CORNELL_NOTES_PROMPT = ChatPromptTemplate.from_messages([
-    (
-        "system",
-        """You are an expert educator. Format the following transcript into the classic Cornell Notes structure using Markdown tables and sections.
 
-{language_instruction}
-
-Structure:
-# 📓 Cornell Notes: [Topic]
-
-### 📌 Summary
-(A 3-4 sentence high-level summary at the top)
-
-| 🔑 Cues / Key Questions | 📝 Detailed Notes & Explanations |
-| :--- | :--- |
-| (Major question or keyword) | (Detailed explanation, definitions, bullet points) |
-| (Next core concept) | (Corresponding notes, code, or formulas) |
-
-### 🏁 Bottom Line / Actionable Conclusion
-(Key takeaway for exam prep or reference)
-""",
-    ),
-    ("human", "Transcript:\n\n{text}"),
-])
-
-# 3. High-Yield Cheatsheet Prompt
+# 2. Cheat Sheet Prompt
 CHEATSHEET_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are creating a quick-reference revision cheatsheet from this transcript.
-Be extremely concise, high-yield, and eliminate all fluff.
+        """You are an expert tutor creating a high-yield Cheat Sheet from a YouTube video transcript.
 
 {language_instruction}
 
-Structure:
-# ⚡ Quick Revision Cheatsheet
+CRITICAL REQUIREMENT — SPEAKER'S EXACT ANALOGIES:
+- Incorporate the instructor's exact real-world analogies, metaphors, and examples into the explanations and solutions.
 
-### 🔑 Core Terminology & Definitions
-- **Term 1**: 1-sentence definition
-- **Term 2**: 1-sentence definition
+CRITICAL REQUIREMENT — HIGH YIELD & CONCISE:
+- Provide maximum value with zero fluff. Every bullet point should be actionable and memorable.
 
-### 📌 Rules, Formulas, or Code Patterns
-- Essential formulas, commands, or rules to remember.
+STRUCTURE THE CHEAT SHEET EXACTLY AS FOLLOWS:
 
-### ⚠️ Common Pitfalls / Mistakes Mentioned
-- Things to avoid.
+# ⚡ Quick Revision Cheat Sheet: [Topic / Video Title]
 
-### 🎯 60-Second Recap
-- 3 bullet points summarizing the entire video.
+## 📌 Full Video Important Points
+- Core concepts, definitions, formulas, and rules across the entire video.
+- Include the instructor's main real-world analogies summarized in concise bullet points.
+
+## ❓ Questions with Solutions
+- The most important questions or problems addressed throughout the video.
+- Crisp step-by-step solutions explained using the speaker's actual analogies.
+
+## 🎯 Practice Questions
+- 3 to 4 high-yield practice questions to test complete mastery, along with brief hints/answers.
+
+## 🔑 Revision Tips & Key Formulas / Rules
+- Rapid-fire memory checklist for quick last-minute review.
 """,
     ),
-    ("human", "Transcript:\n\n{text}"),
+    ("human", "Transcript with timestamps:\n\n{text}"),
 ])

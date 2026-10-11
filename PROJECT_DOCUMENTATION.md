@@ -1,17 +1,17 @@
-# AI Video Assistant — Complete Project Documentation & Codebase Guide
+# NotesGen AI — Complete Project Documentation & Codebase Guide
 
 ---
 
 ## 1. Project Overview & Architecture
 
-**AI Video Assistant** is an end-to-end intelligence system for processing video and audio files (including direct YouTube URLs and local multimedia files). It transcribes speech, extracts summaries, identifies key decisions and action items, indexes content into a vector database, and allows users to chat with the video transcript using Retrieval-Augmented Generation (RAG).
+**NotesGen AI** is an intelligent, end-to-end study platform for processing educational YouTube videos and multimedia lectures. It transcribes speech, validates educational relevance via guardrails, extracts 100% topic concept cruxes with speaker analogies, indexes content into a vector database, and allows users to chat with the video notes using topic-isolated Retrieval-Augmented Generation (RAG).
 
 ### Key Technologies
 * **Speech-to-Text**: Local OpenAI Whisper (`small` model) for English; Sarvam AI API (`saaras:v2.5`) for Hinglish/Hindi with English translation.
 * **Audio Processing**: `yt-dlp` (YouTube audio extraction), `pydub` / `ffmpeg` (format conversion and audio chunking).
-* **LLM & Orchestration**: LangChain & Mistral AI (`mistral-small-latest`).
+* **LLM & Orchestration**: Groq (`openai/gpt-oss-120b`, `qwen/qwen3.8-27b`, `openai/gpt-oss-20b`) & LangChain LCEL.
 * **Vector Store & Embeddings**: HuggingFace `all-MiniLM-L6-v2` embeddings and ChromaDB vector store.
-* **Interfaces**: Terminal CLI (`main.py`) and a modern dark-themed web interface built with Streamlit (`app.py`).
+* **Interfaces**: React + TypeScript SPA (with Vite and Tailwind CSS), FastAPI backend (`server.py`), Streamlit UI (`app.py`), and Terminal CLI (`main.py`).
 
 ---
 
@@ -291,7 +291,7 @@ def summarize(transcript: str) -> str:
     llm = get_llm()
 
     map_prompt = ChatPromptTemplate.from_messages([
-        ("system", "Summarize this portion of a meeting transcript concisely."),
+        ("system", "Summarize this portion of a video transcript concisely."),
         ("human", "{text}"),
     ])
 
@@ -303,8 +303,8 @@ def summarize(transcript: str) -> str:
     combined_prompt = ChatPromptTemplate.from_messages([
         (
             "system",
-            "You are an expert meeting summarizer. Combine these partial summaries "
-            "into one final professional meeting summary in bullet points.",
+            "You are an expert video summarizer and study note analyst. Combine these partial summaries "
+            "into one comprehensive, structured video summary in bullet points.",
         ),
         ("human", "{text}"),
     ])
@@ -316,16 +316,16 @@ def summarize(transcript: str) -> str:
     return combined_chain.invoke(combined)
 
 
-def generate_title(transcipt: str) -> str:
-    llm = get_llm()
+def generate_title(transcript: str) -> str:
+    llm = get_llm(model="qwen/qwen3.8-27b", max_tokens=40, temperature=0.2)
 
     title_chain = (
         RunnablePassthrough() | RunnableLambda(lambda x: {"text": x}) | 
         ChatPromptTemplate.from_messages([
              (
                 "system",
-                "Based on the meeting transcript, generate a short professional meeting title "
-                "(max 8 words). Only return the title, nothing else.",
+                "Based on the transcript, generate a short professional educational video title "
+                "(max 7 words). Only return the title, nothing else.",
             ),
             ("human", "{text}"),
         ])
@@ -333,7 +333,7 @@ def generate_title(transcipt: str) -> str:
         | StrOutputParser()
     )
 
-    return title_chain.invoke(transcipt[:2000])
+    return title_chain.invoke(transcript[:1000]).strip().strip('"\'')
 ```
 
 ---
@@ -341,66 +341,71 @@ def generate_title(transcipt: str) -> str:
 ### File 4: `core/extractor.py`
 
 #### Purpose & Logic:
-Extracts targeted meeting intelligence using LangChain Expression Language (LCEL) chains:
-1. `build_chain(system_prompt)`: Creates a reusable LCEL chain connecting the prompt template, Mistral AI model (temperature 0.2 for deterministic extraction), and string output parser.
-2. `extract_action_items(transcript)`: Extracts tasks, assigned owners, and deadlines.
-3. `extract_key_decisions(transcript)`: Identifies all major decisions made during the conversation.
-4. `extract_questions(transcript)`: Lists open, unresolved questions and follow-ups.
+Extracts targeted educational intelligence using LangChain Expression Language (LCEL) chains:
+1. `build_chain(system_prompt)`: Creates a reusable LCEL chain connecting the prompt template, Groq LLM (temperature 0.2 for deterministic extraction), and string output parser.
+2. `extract_key_concepts(transcript)`: Extracts core principles, definitions, and speaker analogies.
+3. `extract_action_items(transcript)`: Extracts practical exercises, practice tasks, and homework assigned in the video.
+4. `extract_key_decisions(transcript)`: Identifies major takeaways and conclusions established.
+5. `extract_questions(transcript)`: Lists open study questions and thought experiments for learners.
 
 #### Code:
 ```python
-# Actionable items, decisions, questions 
-from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from core.llm import get_llm
 import os 
 
 
-def get_llm():
-    return ChatMistralAI(model="mistral-small-latest", mistral_api_key=os.getenv("MISTRAL_API_KEY"), temperature=0.2)
-
-
 def build_chain(system_prompt: str):
-    llm = get_llm()
+    llm = get_llm(temperature=0.2)
     return (
-        RunnablePassthrough() 
-        | RunnableLambda(lambda x: {"text": x}) 
-        | ChatPromptTemplate.from_messages([
+        RunnablePassthrough() | RunnableLambda(lambda x: {"text": x}) | ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", "{text}"),
-        ]) 
-        | llm 
-        | StrOutputParser()
+        ]) | llm | StrOutputParser()
     )
 
 
-def extract_action_items(transcript: str) -> str:
+def extract_key_concepts(transcript: str) -> str:
+    """Extract primary educational concepts and definitions from video transcript."""
     chain = build_chain(
-        "You are an expert meeting analyst. From the meeting transcript, "
-        "extract all action items. For each provide:\n"
-        "- Task description\n"
-        "- Owner (who is responsible)\n"
-        "- Deadline (if mentioned, else write 'Not specified')\n\n"
-        "Format as a numbered list. If none found say 'No action items found.'"
+        "You are an expert video study analyst. From the video transcript, "
+        "extract the core concepts, principles, and key definitions covered. "
+        "For each concept, explain its crux and any analogy used by the speaker. "
+        "Format as a structured numbered list."
+    )
+    return chain.invoke(transcript)
+
+
+def extract_action_items(transcript: str) -> str:
+    """Extract practical exercises, steps, or homework mentioned in the video."""
+    chain = build_chain(
+        "You are an expert educational coach. From the video transcript, "
+        "extract all practical exercises, action steps, or practice tasks mentioned for learners:\n"
+        "- Task / Exercise description\n"
+        "- Suggested approach or tool\n\n"
+        "Format as a numbered list. If none found say 'No specific practice tasks assigned.'"
     )
     return chain.invoke(transcript)
 
 
 def extract_key_decisions(transcript: str) -> str:
+    """Extract key takeaways and conclusions from the video."""
     chain = build_chain(
-        "You are an expert meeting analyst. From the meeting transcript, "
-        "extract all key decisions made. Format as a numbered list. "
-        "If none found say 'No key decisions found.'"
+        "You are an expert educational analyst. From the video transcript, "
+        "extract all major takeaways, conclusions, and core lessons established. "
+        "Format as a numbered list. If none found say 'No key conclusions found.'"
     )
     return chain.invoke(transcript)
 
 
 def extract_questions(transcript: str) -> str:
+    """Extract self-study questions or practice questions from the video."""
     chain = build_chain(
-        "From the meeting transcript, extract all unresolved questions "
-        "or topics needing follow-up. Format as a numbered list. "
-        "If none found say 'No open questions found.'"
+        "From the video transcript, extract important questions raised, self-test questions, "
+        "or thought experiments that test understanding of the material. "
+        "Format as a numbered list. If none found say 'No open questions found.'"
     )
     return chain.invoke(transcript)
 ```
@@ -425,7 +430,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 CHROMA_DIR = "vector_db"
-COLLECTION_NAME = "meeting_transcript"
+COLLECTION_NAME = "video_transcript"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 
@@ -518,15 +523,15 @@ def build_rag_chain(transcript: str):
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
-            """You are an expert meeting assistant. Answer the user's question 
-based ONLY on the meeting transcript context provided below.
+            """You are NotesGen AI, an expert video learning assistant. Answer the user's question 
+based ONLY on the video transcript context provided below.
 
 If the answer is not found in the context, say: 
-"I could not find this information in the meeting transcript."
+"I could not find this information in the video transcript."
 
-Always be concise and precise. If quoting someone, mention it clearly.
+Always be concise, precise, and educational. If the speaker used a specific analogy or example, cite it clearly.
 
-Context from meeting transcript:
+Context from video transcript:
 {context}""",
         ),
         ("human", "{question}"),
@@ -554,15 +559,15 @@ def load_rag_chain():
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
-            """You are an expert meeting assistant. Answer the user's question 
-based ONLY on the meeting transcript context provided below.
+            """You are NotesGen AI, an expert video learning assistant. Answer the user's question 
+based ONLY on the video transcript context provided below.
 
 If the answer is not found in the context, say: 
-"I could not find this information in the meeting transcript."
+"I could not find this information in the video transcript."
 
-Always be concise and precise. If quoting someone, mention it clearly.
+Always be concise, precise, and educational. If the speaker used a specific analogy or example, cite it clearly.
 
-Context from meeting transcript:
+Context from video transcript:
 {context}""",
         ),
         ("human", "{question}"),
@@ -594,61 +599,74 @@ def ask_question(rag_chain, question: str) -> str:
 
 #### Purpose & Logic:
 The primary CLI entrypoint of the application:
-1. `run_pipeline(source, language)`: Runs all stages in sequence: audio chunking, transcription, title generation, summarization, extraction, and RAG indexing.
-2. CLI Loop: Prints the results to the terminal and enters an interactive conversational loop (`while True`) where users can chat with the meeting content until typing `exit`.
+1. `run_pipeline(source, language, style)`: Runs all stages in sequence: audio acquisition, transcription, title generation, note generation, concept extraction, and RAG indexing.
+2. CLI Loop: Prints the notes and concept cruxes to the terminal and enters an interactive conversational loop (`while True`) where users can chat with the video notes until typing `exit`.
 
 #### Code:
 ```python
 from dotenv import load_dotenv
-from utils.audio_processor import process_input
+from core.audio_processor import process_input
 from core.transcriber import transcribe_all
-from core.summarizer import summarize, generate_title
-from core.extractor import extract_action_items, extract_key_decisions, extract_questions
-from core.rag_engine import build_rag_chain, ask_question
+from core.summarizer import generate_title
+from core.notes_generator import generate_video_notes
+from core.extractor import extract_key_concepts, extract_questions
+from rag.rag_engine import build_rag_chain, ask_question
 
 load_dotenv()
 
-def run_pipeline(source: str, language: str = "english") -> dict:
-    print("starting AI Video Assistant")
 
+def run_pipeline(source: str, language: str = "hinglish", style: str = "detailed") -> dict:
+    print("\n🚀 Starting NotesGen AI...")
+
+    # Process audio chunks
     chunks = process_input(source)
-    transcript = transcribe_all(chunks, language)
-    print(f"raw transcription (first 300 characters ) {transcript[:300]}")
 
+    # Transcribe speech
+    transcript = transcribe_all(chunks, language)
     title = generate_title(transcript)
-    summary = summarize(transcript)
-    action_item = extract_action_items(transcript)
-    decisions = extract_key_decisions(transcript)
+
+    # Generate structured study notes
+    notes = generate_video_notes(transcript, style=style, language=language)
+
+    # Extract key concepts and study questions
+    key_concepts = extract_key_concepts(transcript)
     questions = extract_questions(transcript)
-    
+
+    # Build RAG chain
     rag_chain = build_rag_chain(transcript)
 
     return {
         "title": title,
         "transcript": transcript,
-        "summary": summary,
-        "action_items": action_item,
-        "key_decisions": decisions,
+        "notes": notes,
+        "key_concepts": key_concepts,
         "open_questions": questions,
         "rag_chain": rag_chain,
     }
 
+
 if __name__ == "__main__":
-    # CLI entry point
-    source = input("Enter YouTube URL or local file path: ").strip()
-    language = input("Language (english/hinglish): ").strip() or "english"
-    result = run_pipeline(source, language)
+    print("=" * 60)
+    print(" 📚 NotesGen AI — Turn Videos into Smart Notes")
+    print("=" * 60)
+
+    source = input("\nEnter YouTube URL or local video/audio path: ").strip()
+    language = input("Language (hinglish / english) [default: hinglish]: ").strip().lower() or "hinglish"
+    style = input("Notes Style (detailed / cheatsheet) [default: detailed]: ").strip().lower() or "detailed"
+
+    result = run_pipeline(source, language, style)
 
     print("\n" + "=" * 60)
     print(f"📌 Title: {result['title']}")
-    print(f"\n📋 Summary:\n{result['summary']}")
-    print(f"\n✅ Action Items:\n{result['action_items']}")
-    print(f"\n🔑 Key Decisions:\n{result['key_decisions']}")
-    print(f"\n❓ Open Questions:\n{result['open_questions']}")
+    print("=" * 60)
+    print(f"\n📖 Structured Notes:\n{result['notes']}")
+    print("\n" + "-" * 60)
+    print(f"\n💡 Core Concepts & Analogies:\n{result['key_concepts']}")
+    print(f"\n❓ Self-Study Questions:\n{result['open_questions']}")
     print("=" * 60)
 
-    # Phase 2 — Chat with your meeting via RAG
-    print("\n💬 Chat with your meeting (type 'exit' to quit)\n")
+    # Chat with video transcript via RAG
+    print("\n💬 Chat with your video notes (type 'exit' to quit)\n")
     rag_chain = result["rag_chain"]
     while True:
         question = input("You: ").strip()
@@ -687,8 +705,8 @@ load_dotenv()
 
 # ─── Page Config ────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="AI Video Assistant",
-    page_icon="🎬",
+    page_title="NotesGen AI — Turn Videos into Smart Notes",
+    page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -936,37 +954,56 @@ def render_step_bar(label: str, key: str, icon: str):
 
 # ─── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown('<div class="hero-title" style="font-size:1.6rem">🎬 AI<br>Video</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-sub">Meeting Intelligence</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:0.5rem">
+        <div style="width:36px;height:36px;background:#ff2442;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:bold;color:white">N</div>
+        <div>
+            <div style="font-weight:800;font-size:1.1rem;color:white;display:flex;align-items:center;gap:6px">
+                NotesGen <span style="font-size:9px;background:#2a0b11;color:#ff4d66;padding:1px 5px;border-radius:4px;border:1px solid rgba(255,36,66,0.3)">AI</span>
+            </div>
+            <div style="font-size:0.75rem;color:#8b92a4">Video Study Intelligence</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     st.markdown("---")
 
-    st.markdown('<span class="badge badge-purple">Input</span>', unsafe_allow_html=True)
-    source = st.text_input("YouTube URL or File Path", placeholder="https://youtube.com/watch?v=... or /path/to/file.mp4")
-    language = st.selectbox("Language", ["english", "hinglish"], index=0)
-    run_btn = st.button("⚡  Analyse", use_container_width=True)
+    st.markdown('<span class="badge badge-red">Notes Format</span>', unsafe_allow_html=True)
+    note_style = st.selectbox(
+        "Notes Format",
+        ["detailed", "cheatsheet"],
+        index=0,
+        format_func=lambda x: {
+            "detailed": "📖 Detailed Notes (100% Concept Crux)",
+            "cheatsheet": "⚡ Quick Cheat Sheet (Crux Only)"
+        }[x],
+        label_visibility="collapsed"
+    )
+
+    source = st.text_input("YouTube URL or File Path", placeholder="https://youtube.com/watch?v=...")
+    language = st.selectbox("Language", ["hinglish", "english"], index=0)
+    run_btn = st.button("✨  Generate Smart Notes", use_container_width=True)
 
     if st.session_state.pipeline_done:
         st.markdown("---")
         st.markdown('<span class="badge badge-green">Pipeline Status</span>', unsafe_allow_html=True)
         for step, icon, label in [
-            ("audio",      "🔊", "Audio Processing"),
-            ("transcript", "📝", "Transcription"),
+            ("transcript", "📝", "Transcript Retrieval"),
+            ("guardrail",  "🛡️", "Educational Guardrail"),
             ("title",      "🏷️", "Title Generation"),
-            ("summary",    "📋", "Summarisation"),
-            ("extract",    "🔍", "Extraction"),
-            ("rag",        "🧠", "RAG Engine"),
+            ("notes",      "📚", "Notes Generation"),
+            ("rag",        "🧠", "Isolated RAG Engine"),
         ]:
             render_step_bar(label, step, icon)
 
 # ─── Main Area ──────────────────────────────────────────────────────────────────
-st.markdown('<div class="hero-title">AI Video Assistant</div>', unsafe_allow_html=True)
-st.markdown('<div class="hero-sub">Transcribe · Summarise · Chat with your meetings</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-title">NotesGen AI</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-sub">Turn educational videos into comprehensive study notes with speaker analogies and topic-isolated chat.</div>', unsafe_allow_html=True)
 st.markdown("---")
 
 # ── Run Pipeline ────────────────────────────────────────────────────────────────
 if run_btn:
     if not source.strip():
-        st.error("Please enter a YouTube URL or file path.")
+        st.error("Please enter a YouTube URL.")
     else:
         st.session_state.pipeline_done = False
         st.session_state.result = None
@@ -980,29 +1017,26 @@ if run_btn:
 
         try:
             with progress_placeholder.container():
-                st.info("⚙️ Pipeline running — see sidebar for live status…")
-
-            update_step("audio", "active")
-            chunks = process_input(source)
-            update_step("audio", "done")
+                st.info("⚙️ Processing video — see sidebar for live status…")
 
             update_step("transcript", "active")
-            transcript = transcribe_all(chunks, language)
+            transcript = get_youtube_transcript_with_timestamps(source) or transcribe_all(process_input(source), language)
             update_step("transcript", "done")
+
+            update_step("guardrail", "active")
+            is_edu, msg = check_video_educational(transcript, title=source)
+            if not is_edu:
+                st.error(msg)
+                st.stop()
+            update_step("guardrail", "done")
 
             update_step("title", "active")
             title = generate_title(transcript)
             update_step("title", "done")
 
-            update_step("summary", "active")
-            summary = summarize(transcript)
-            update_step("summary", "done")
-
-            update_step("extract", "active")
-            action_items  = extract_action_items(transcript)
-            decisions     = extract_key_decisions(transcript)
-            questions     = extract_questions(transcript)
-            update_step("extract", "done")
+            update_step("notes", "active")
+            notes = generate_video_notes(transcript, style=note_style, language=language)
+            update_step("notes", "done")
 
             update_step("rag", "active")
             rag_chain = build_rag_chain(transcript)
@@ -1011,22 +1045,13 @@ if run_btn:
             st.session_state.result = {
                 "title": title,
                 "transcript": transcript,
-                "summary": summary,
-                "action_items": action_items,
-                "key_decisions": decisions,
-                "open_questions": questions,
+                "notes": notes,
                 "rag_chain": rag_chain,
             }
             st.session_state.pipeline_done = True
-            progress_placeholder.success("✅ Analysis complete!")
-            time.sleep(0.5)
-            progress_placeholder.empty()
             st.rerun()
 
         except Exception as e:
-            for k in ["audio","transcript","title","summary","extract","rag"]:
-                if st.session_state.pipeline_steps.get(k) == "active":
-                    st.session_state.pipeline_steps[k] = "pending"
             progress_placeholder.error(f"❌ Error: {e}")
 
 # ── Results ──────────────────────────────────────────────────────────────────────
@@ -1035,52 +1060,32 @@ if st.session_state.result:
 
     st.markdown(f"""
     <div class="card">
-        <div class="card-title">📌 Session Title</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:700;color:var(--text)">
+        <div class="card-title">📌 Video Title</div>
+        <div style="font-size:1.35rem;font-weight:700;color:var(--text)">
             {r['title']}
         </div>
     </div>""", unsafe_allow_html=True)
 
-    col1, col2 = st.columns([3, 2], gap="medium")
+    col_note_title, col_dl = st.columns([4, 1])
+    with col_note_title:
+        st.markdown('<div class="card-title">📚 Generated Study Notes</div>', unsafe_allow_html=True)
+    with col_dl:
+        st.download_button("📥 Download (.md)", r.get("notes", ""), file_name=f"{r['title'][:30].strip()}_notes.md")
 
-    with col1:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">📋 Summary</div>
-            <div class="card-content">{r['summary']}</div>
-        </div>""", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="card">
+        <div class="card-content" style="white-space: pre-wrap;">
+{r.get('notes', '')}
+        </div>
+    </div>""", unsafe_allow_html=True)
 
-    with col2:
-        with st.expander("📝 Full Transcript", expanded=False):
-            st.markdown(f'<div class="transcript-box">{r["transcript"]}</div>', unsafe_allow_html=True)
-
-    c1, c2, c3 = st.columns(3, gap="medium")
-
-    with c1:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">✅ Action Items</div>
-            <div class="card-content">{r['action_items']}</div>
-        </div>""", unsafe_allow_html=True)
-
-    with c2:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">🔑 Key Decisions</div>
-            <div class="card-content">{r['key_decisions']}</div>
-        </div>""", unsafe_allow_html=True)
-
-    with c3:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">❓ Open Questions</div>
-            <div class="card-content">{r['open_questions']}</div>
-        </div>""", unsafe_allow_html=True)
+    with st.expander("📝 Full Transcript", expanded=False):
+        st.markdown(f'<div class="transcript-box">{r["transcript"]}</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
     # ── RAG Chat ──
-    st.markdown('<div style="font-family:\'Syne\',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:1rem">💬 Chat with your Meeting</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.2rem;font-weight:700;margin-bottom:1rem">💬 Chat with Video Notes</div>', unsafe_allow_html=True)
 
     if st.session_state.chat_history:
         chat_html = '<div class="chat-container">'
@@ -1094,7 +1099,7 @@ if st.session_state.result:
             else:
                 chat_html += f"""
                 <div class="chat-msg" style="align-items:flex-start">
-                    <span class="chat-label bot-label">🤖 Assistant</span>
+                    <span class="chat-label bot-label">🤖 NotesGen</span>
                     <div class="chat-bubble bot-bubble">{msg['content']}</div>
                 </div>"""
         chat_html += '</div>'
@@ -1103,7 +1108,7 @@ if st.session_state.result:
         st.markdown("""
         <div class="card" style="text-align:center;padding:2rem">
             <div style="font-size:2rem;margin-bottom:0.5rem">💬</div>
-            <div style="color:var(--text-muted);font-size:0.85rem">Ask anything about your meeting transcript</div>
+            <div style="color:var(--text-muted);font-size:0.85rem">Ask anything about the video concepts, analogies, or notes</div>
         </div>""", unsafe_allow_html=True)
 
     chat_col1, chat_col2 = st.columns([5, 1], gap="small")
@@ -1180,31 +1185,25 @@ print("\n📋 SUMMARY")
 print("-" * 60)
 print(summary)
 
-action_items = extract_action_items(transcript)
-decisions = extract_key_decisions(transcript)
+key_concepts = extract_key_concepts(transcript)
 questions = extract_questions(transcript)
 
 print("\n" + "=" * 60)
-print("✅ ACTION ITEMS")
+print("💡 KEY CONCEPTS & ANALOGIES")
 print("=" * 60)
-print(action_items)
+print(key_concepts)
 
 print("\n" + "=" * 60)
-print("🔑 KEY DECISIONS")
-print("=" * 60)
-print(decisions)
-
-print("\n" + "=" * 60)
-print("❓ OPEN QUESTIONS")
+print("❓ STUDY QUESTIONS")
 print("=" * 60)
 print(questions)
 ```
 
 ---
 
-## 3. Step-by-Step Flow to Add "YouTube Video Notes Generator"
+## 3. NotesGen AI Video Notes Architecture
 
-A **Video Notes Generator** differs from a meeting summarizer. Instead of extracting action items and decisions, it generates **structured educational study materials** with chapters, timestamped explanations, key definitions, cheat sheets, and downloadable notes.
+**NotesGen AI** generates **structured educational study materials** with 100% topic concept cruxes, speaker analogies, timeline markers, cheat sheets, and downloadable notes.
 
 ### Architecture of the Notes Feature
 
@@ -1279,12 +1278,10 @@ flowchart TD
 ### Step 5: User Interface Integration in `app.py`
 * **Goal**: Seamlessly incorporate the feature into the existing Streamlit dashboard.
 * **Flow**:
-  1. **Mode Switch**: Add a selection radio in the sidebar:
-     * Mode A: *Meeting Assistant* (Summary, Action Items, Decisions, RAG)
-     * Mode B: *YouTube Study Notes* (Chapter Breakdown, Study Guide, Flashcards)
-  2. **Note Options**: If "YouTube Study Notes" is selected, display:
-     * Note Format: (Comprehensive / Cornell / Cheatsheet)
-     * Timestamp inclusion toggle
+  1. **NotesGen Options**:
+     * Format: Detailed Notes (100% Concept Crux) vs Quick Cheat Sheet
+     * Language: Hinglish (Natural Indian Flow) vs English
+     * Timeline Slicing: Full Video or Custom Range (e.g. 00:00 - 05:00)
   3. **Display Tabs**: Organize output into clear tabs:
      * Tab 1: 📚 Study Notes
      * Tab 2: 📝 Raw Transcript

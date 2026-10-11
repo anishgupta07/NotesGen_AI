@@ -233,9 +233,18 @@ def api_generate_notes(req: GenerateNotesRequest, current_user: dict = Depends(g
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             cleanup_audio_files(chunks)
+            err_str = str(e)
+            if "player response" in err_str.lower() or "bot" in err_str.lower() or "confirm you" in err_str.lower():
+                detail_msg = (
+                    "This video has subtitles disabled by the creator, and YouTube blocked audio downloading "
+                    "on this cloud server. Please try a video with closed captions (CC enabled), or run NotesGen "
+                    "locally on your PC to process videos without captions."
+                )
+            else:
+                detail_msg = f"Failed to extract and transcribe audio: {err_str}"
             raise HTTPException(
-                status_code=500,
-                detail=f"Failed to extract and transcribe audio: {str(e)}"
+                status_code=400,
+                detail=detail_msg
             )
 
     if not transcript:

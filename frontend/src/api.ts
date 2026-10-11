@@ -124,8 +124,16 @@ export async function requestGenerateNotes(payload: GenerateNotesRequest): Promi
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || 'Failed to generate notes');
+    let errorDetail = '';
+    try {
+      const errorData = await res.json();
+      errorDetail = errorData.detail || '';
+    } catch {
+      const text = await res.text().catch(() => '');
+      errorDetail = text.slice(0, 150) || '';
+    }
+    const message = errorDetail || (res.status === 504 ? 'Request timed out on cloud server. Please check your Groq API key or try another video.' : `Server error (${res.status}): Failed to generate notes`);
+    throw new Error(message);
   }
   return res.json();
 }

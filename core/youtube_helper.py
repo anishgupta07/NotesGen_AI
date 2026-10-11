@@ -32,40 +32,62 @@ def get_proxy_config():
     return None
 
 
+def fetch_raw_transcript(video_id: str, proxy_config=None):
+    """Fetch transcript with language fallback."""
+    api = YouTubeTranscriptApi(proxy_config=proxy_config) if proxy_config else YouTubeTranscriptApi()
+    # 1. Try English and Hindi
+    try:
+        obj = api.fetch(video_id, languages=['en', 'hi'])
+        return obj.to_raw_data()
+    except Exception:
+        pass
+    # 2. Try any language
+    try:
+        obj = api.fetch(video_id)
+        return obj.to_raw_data()
+    except Exception:
+        pass
+    # 3. Legacy method fallback
+    if hasattr(YouTubeTranscriptApi, "get_transcript"):
+        try:
+            return YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi'])
+        except Exception:
+            try:
+                return YouTubeTranscriptApi.get_transcript(video_id)
+            except Exception:
+                pass
+    return None
+
+
 def get_youtube_transcript_with_timestamps(url: str) -> str | None:
     """Fetch official or auto-generated YouTube subtitles formatted with [MM:SS] timestamps.
-    Automatically routes through proxy if YOUTUBE_PROXY or HTTP_PROXY is configured.
+    Resilient: tries proxy first if configured, then falls back to direct connection.
     """
     video_id = extract_youtube_video_id(url)
     if not video_id:
         return None
 
-    try:
-        proxy_config = get_proxy_config()
-        api = YouTubeTranscriptApi(proxy_config=proxy_config) if proxy_config else YouTubeTranscriptApi()
+    proxy_config = get_proxy_config()
+    transcript_data = None
 
-        transcript_data = None
-        # 1. Try English and Hindi first
+    # 1. If proxy is configured, try proxy first
+    if proxy_config:
         try:
-            transcript_obj = api.fetch(video_id, languages=['en', 'hi'])
-            transcript_data = transcript_obj.to_raw_data()
-        except Exception:
-            # 2. Fallback: fetch whatever transcript/captions are available
-            try:
-                transcript_obj = api.fetch(video_id)
-                transcript_data = transcript_obj.to_raw_data()
-            except Exception:
-                pass
+            transcript_data = fetch_raw_transcript(video_id, proxy_config=proxy_config)
+        except Exception as e:
+            print(f"Proxy transcript attempt failed ({e}). Falling back to direct connection...")
 
-        if not transcript_data and hasattr(YouTubeTranscriptApi, "get_transcript"):
-            try:
-                transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi'])
-            except Exception:
-                transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
+    # 2. If proxy was not configured or failed, try direct connection
+    if not transcript_data:
+        try:
+            transcript_data = fetch_raw_transcript(video_id, proxy_config=None)
+        except Exception as e:
+            print(f"Direct transcript attempt notice: {e}")
 
-        if not transcript_data:
-            return None
+    if not transcript_data:
+        return None
 
+    try:
         formatted_transcript = []
         for entry in transcript_data:
             start_seconds = int(entry['start'])
@@ -76,7 +98,7 @@ def get_youtube_transcript_with_timestamps(url: str) -> str | None:
 
         return "\n".join(formatted_transcript)
     except Exception as e:
-        print(f"Direct YouTube subtitle fetch failed ({e}). Falling back to audio Whisper transcription...")
+        print(f"Formatting transcript error ({e}).")
         return None
 
 

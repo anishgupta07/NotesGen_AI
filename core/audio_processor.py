@@ -48,39 +48,44 @@ def download_youtube_audio(url: str) -> str:
             clean_proxy = f"http://{clean_proxy}"
 
     last_error = None
-    for extractor_args in client_strategies:
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "outtmpl": out_template,
-            "noplaylist": True,
-            "ffmpeg_location": ffmpeg_dir,
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "wav",
-                    "preferredquality": "192",
-                }
-            ],
-            "quiet": True,
-            "no_warnings": True,
-        }
-        if clean_proxy:
-            ydl_opts["proxy"] = clean_proxy
-        if extractor_args:
-            ydl_opts["extractor_args"] = extractor_args
+    # If proxy is provided, try with proxy first; if it fails, try without proxy as fallback
+    proxy_options = [clean_proxy, None] if clean_proxy else [None]
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.extract_info(clean_url, download=True)
-            if os.path.exists(expected_wav):
-                return expected_wav
-            # Fallback check for any generated wav matching target_id
-            for f in os.listdir(DOWNLOAD_DIR):
-                if f.startswith(target_id) and f.endswith(".wav"):
-                    return os.path.join(DOWNLOAD_DIR, f)
-        except Exception as e:
-            last_error = e
-            continue
+    for current_proxy in proxy_options:
+        for extractor_args in client_strategies:
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": out_template,
+                "noplaylist": True,
+                "socket_timeout": 10,
+                "ffmpeg_location": ffmpeg_dir,
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "wav",
+                        "preferredquality": "192",
+                    }
+                ],
+                "quiet": True,
+                "no_warnings": True,
+            }
+            if current_proxy:
+                ydl_opts["proxy"] = current_proxy
+            if extractor_args:
+                ydl_opts["extractor_args"] = extractor_args
+
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.extract_info(clean_url, download=True)
+                if os.path.exists(expected_wav):
+                    return expected_wav
+                # Fallback check for any generated wav matching target_id
+                for f in os.listdir(DOWNLOAD_DIR):
+                    if f.startswith(target_id) and f.endswith(".wav"):
+                        return os.path.join(DOWNLOAD_DIR, f)
+            except Exception as e:
+                last_error = e
+                continue
 
     if not os.path.exists(expected_wav):
         # Final fallback check for any generated wav matching target_id

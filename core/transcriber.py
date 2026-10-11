@@ -57,9 +57,13 @@ def transcribe_chunk(chunk_path: str, language: str = "english", groq_api_key: O
         if groq_text:
             return groq_text
 
-    # Cloud environments (Render, Railway, etc.) have strict 512MB RAM limits.
-    # Running local PyTorch Whisper on 512MB RAM triggers kernel OOM SIGKILL (502 Bad Gateway).
-    is_cloud = bool(os.getenv("RENDER") or os.getenv("RAILWAY_ENVIRONMENT"))
+    # Cloud environments (Render, Railway, HF Spaces, etc.) have strict RAM limits.
+    # Running local PyTorch Whisper triggers OOM → process killed (502 / 503).
+    is_cloud = bool(
+        os.getenv("RENDER") or
+        os.getenv("RAILWAY_ENVIRONMENT") or
+        os.getenv("SPACE_ID")          # Hugging Face Spaces sets this automatically
+    )
     if is_cloud:
         raise RuntimeError(
             "Cloud transcription requires an active Groq API Key. "

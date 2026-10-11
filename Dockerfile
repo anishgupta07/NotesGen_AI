@@ -32,12 +32,13 @@ COPY . .
 # Copy compiled React frontend assets from Stage 1
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-# Create runtime directories for SQLite and ChromaDB
+# Create runtime directories for SQLite and RAG chunk store
 RUN mkdir -p data/downloads data/vector_db
 
-# Cloud environments dynamically assign $PORT
-ENV PORT=8000 RENDER=true
-EXPOSE 8000
+# Hugging Face Spaces routes external traffic to port 7860.
+# PORT env var can be overridden at runtime for other platforms (Render, Railway, local).
+ENV PORT=7860
+EXPOSE 7860
 
 # Start unified FastAPI server
-CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-7860}"]

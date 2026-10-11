@@ -103,21 +103,32 @@ def transcribe_chunk(chunk_path: str, language: str = "english") -> str:
     return transcribe_chunk_whisper(chunk_path)
 
 
-def transcribe_all(chunks: list, language: str = "english") -> str:
-
+def transcribe_all(chunks: list, language: str = "english", auto_cleanup: bool = True) -> str:
     full_transcript = "" 
-
     engine = "Sarvam AI" if language.lower() == "hinglish" else "Whisper"
     print(f"Using {engine} for transcription.")
 
-    for i, chunk in enumerate(chunks):  
-
-        print(f"Transcribing chunk {i + 1}/{len(chunks)}...")
-
-        text = transcribe_chunk(chunk, language=language)  
-
-        full_transcript += text + " "  
+    try:
+        for i, chunk in enumerate(chunks):  
+            print(f"Transcribing chunk {i + 1}/{len(chunks)}...")
+            try:
+                text = transcribe_chunk(chunk, language=language)  
+                full_transcript += text + " "
+            finally:
+                if auto_cleanup and os.path.exists(chunk):
+                    try:
+                        os.remove(chunk)
+                        print(f"Deleted temporary audio chunk: {os.path.basename(chunk)}")
+                    except Exception as e:
+                        print(f"Warning: could not remove chunk {chunk}: {e}")
+    finally:
+        if auto_cleanup:
+            for remaining in chunks:
+                if os.path.exists(remaining):
+                    try:
+                        os.remove(remaining)
+                    except Exception:
+                        pass
 
     print("Transcription complete.")
-
     return full_transcript.strip()  

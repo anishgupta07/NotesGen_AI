@@ -23,7 +23,7 @@ def run_pipeline(source: str, language: str = "hinglish", style: str = "detailed
     if not transcript:
         print("Processing audio and transcribing speech...")
         chunks = process_input(source)
-        transcript = transcribe_all(chunks, language)
+        transcript = transcribe_all(chunks, language, auto_cleanup=True)
 
     # Educational guardrail check
     is_educational, guardrail_msg = check_video_educational(transcript, title=source)

@@ -394,7 +394,7 @@ if run_btn:
             if not transcript:
                 update_step("transcript", "active")
                 chunks = process_input(source)
-                transcript = transcribe_all(chunks, language)
+                transcript = transcribe_all(chunks, language, auto_cleanup=True)
                 update_step("transcript", "done")
 
             # 3. Educational & Academic Guardrail Layer

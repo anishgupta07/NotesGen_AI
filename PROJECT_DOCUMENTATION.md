@@ -57,19 +57,27 @@ flowchart TD
 ### File 1: `utils/audio_processor.py`
 
 #### Purpose & Logic:
-This module handles all input audio ingestion, format normalization, and chunking:
-1. `download_youtube_audio(url)`: Uses `yt_dlp` to download audio from a YouTube video as a high-quality `.wav` file into the `downloades/` directory.
+This module handles all input audio ingestion, format normalization, chunking, and automatic disk space cleanup:
+1. `download_youtube_audio(url)`: Uses `yt_dlp` to download audio from a YouTube video as a high-quality `.wav` file into the `data/downloads/` directory. Automatically strips playlist parameters, uses clean video IDs, and applies Android/iOS player clients for reliability.
 2. `convert_to_wav(input_path)`: Uses `pydub.AudioSegment` to convert any local video/audio file into single-channel (mono), 16kHz WAV format (the optimal format for Whisper).
-3. `chunk_audio(wav_path, chunk_minutes=10)`: Splits long audio files into 10-minute WAV segments to prevent memory exhaustion and model timeouts during transcription.
-4. `process_input(source)`: Detects if the input is a URL or a local file, runs the corresponding handler, chunks the audio, and returns a list of chunk file paths.
+3. `chunk_audio(wav_path, chunk_minutes=10)`: Splits long audio files into 10-minute WAV segments and immediately deletes the original large WAV file to conserve disk space.
+4. `transcribe_all(chunks, language, auto_cleanup=True)`: Automatically deletes each chunk file right after it is transcribed so disk space remains completely free.
+5. `cleanup_audio_files(file_paths)`: Utility to purge all temporary chunk files safely.
 
 #### Code:
 ```python
+import os
+import shutil
+import uuid
+from pathlib import Path
+import static_ffmpeg
+static_ffmpeg.add_paths()
+
 import yt_dlp
 from pydub import AudioSegment
-import os
+from core.youtube_helper import extract_youtube_video_id
 
-DOWNLOAD_DIR = 'downloades'
+DOWNLOAD_DIR = str(Path(__file__).resolve().parent.parent / "data" / "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 def download_youtube_audio(url: str) -> str:

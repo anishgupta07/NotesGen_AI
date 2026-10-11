@@ -20,7 +20,7 @@ from core.youtube_helper import (
     get_youtube_transcript_with_timestamps,
     filter_transcript_by_timeline,
 )
-from core.audio_processor import process_input
+from core.audio_processor import process_input, cleanup_audio_files
 from core.transcriber import transcribe_all
 from core.summarizer import generate_title
 from core.notes_generator import generate_video_notes
@@ -87,10 +87,14 @@ def api_generate_notes(req: GenerateNotesRequest):
 
     # 2. Fallback: download audio and transcribe via Whisper
     if not transcript:
+        chunks = []
         try:
             chunks = process_input(url)
-            transcript = transcribe_all(chunks, req.language)
+            transcript = transcribe_all(chunks, req.language, auto_cleanup=True)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
+            cleanup_audio_files(chunks)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to extract and transcribe audio: {str(e)}"

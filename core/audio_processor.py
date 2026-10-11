@@ -28,33 +28,56 @@ def download_youtube_audio(url: str) -> str:
     out_template = os.path.join(DOWNLOAD_DIR, f"{target_id}.%(ext)s")
     expected_wav = os.path.join(DOWNLOAD_DIR, f"{target_id}.wav")
 
-    ffmpeg_path = shutil.which("ffmpeg")
+    ffmpeg_exe = shutil.which("ffmpeg")
+    ffmpeg_dir = os.path.dirname(ffmpeg_exe) if ffmpeg_exe else None
 
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": out_template,
-        "noplaylist": True,
-        "ffmpeg_location": ffmpeg_path,
-        "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "wav",
-                "preferredquality": "192",
-            }
-        ],
-        "quiet": True,
-    }
+    # Resilient multi-client strategy: try default smart resolver first (visionos, web), then fallbacks
+    client_strategies = [
+        None,                                        # Default smart multi-client extraction
+        {"youtube": {"player_client": ["web"]}},
+        {"youtube": {"player_client": ["mweb"]}},
+        {"youtube": {"player_client": ["ios", "web"]}},
+    ]
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.extract_info(clean_url, download=True)
+    last_error = None
+    for extractor_args in client_strategies:
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": out_template,
+            "noplaylist": True,
+            "ffmpeg_location": ffmpeg_dir,
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "wav",
+                    "preferredquality": "192",
+                }
+            ],
+            "quiet": True,
+            "no_warnings": True,
+        }
+        if extractor_args:
+            ydl_opts["extractor_args"] = extractor_args
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.extract_info(clean_url, download=True)
+            if os.path.exists(expected_wav):
+                return expected_wav
+            # Fallback check for any generated wav matching target_id
+            for f in os.listdir(DOWNLOAD_DIR):
+                if f.startswith(target_id) and f.endswith(".wav"):
+                    return os.path.join(DOWNLOAD_DIR, f)
+        except Exception as e:
+            last_error = e
+            continue
 
     if not os.path.exists(expected_wav):
-        # Fallback check for any generated wav matching target_id
+        # Final fallback check for any generated wav matching target_id
         for f in os.listdir(DOWNLOAD_DIR):
             if f.startswith(target_id) and f.endswith(".wav"):
                 return os.path.join(DOWNLOAD_DIR, f)
-        raise FileNotFoundError(f"Failed to find downloaded audio file: {expected_wav}")
+        raise RuntimeError(f"Could not download audio from YouTube video: {last_error or 'Unknown error'}")
 
     return expected_wav
 

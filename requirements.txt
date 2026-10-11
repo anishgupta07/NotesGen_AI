@@ -6,7 +6,7 @@ youtube_transcript_api>=0.6.2
 # ── Audio / Video Acquisition & Conversion ───────────────────────────────────
 yt-dlp>=2024.4.9                  # Download audio from YouTube URLs
 pydub>=0.25.1                     # Audio file manipulation / format conversion
-audioop-lts>=0.2.0                # Audioop support for Python 3.13+
+audioop-lts>=0.2.0; python_version >= '3.13'  # Required only on Python 3.13+ (built-in on Python 3.11)
 ffmpeg-python>=0.2.0              # FFmpeg bindings
 static-ffmpeg>=2.5                # Provides self-contained FFmpeg & FFprobe binaries
 

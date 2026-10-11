@@ -1,5 +1,4 @@
 # ── NotesGen AI ── requirements.txt ──────────────────────────────────────────
-# Python >= 3.10 recommended
 
 # ── YouTube Transcript ────────────────────────────────────────────────────────
 youtube_transcript_api>=0.6.2

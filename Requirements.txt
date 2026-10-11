@@ -1,56 +1,52 @@
 # ── NotesGen AI ── requirements.txt ──────────────────────────────────────────
 # Python >= 3.10 recommended
 
-# Transcript 
-youtube_transcript_api
+# ── YouTube Transcript ────────────────────────────────────────────────────────
+youtube_transcript_api>=0.6.2
 
-# ── Audio / Video acquisition ─────────────────────────────────────────────────
+# ── Audio / Video Acquisition & Conversion ───────────────────────────────────
 yt-dlp>=2024.4.9                  # Download audio from YouTube URLs
 pydub>=0.25.1                     # Audio file manipulation / format conversion
-audioop-lts>=0.2.0                # Required for pydub on Python 3.13+
+audioop-lts>=0.2.0                # Audioop support for Python 3.13+
 ffmpeg-python>=0.2.0              # FFmpeg bindings
 static-ffmpeg>=2.5                # Provides self-contained FFmpeg & FFprobe binaries
 
-# ── Speech-to-Text (local Whisper) ────────────────────────────────────────────
-openai-whisper>=20231117          # OpenAI Whisper (runs locally)
+# ── Speech-to-Text (Cloud Groq Whisper + local Whisper fallback) ──────────────
+groq>=0.9.0                       # Groq Cloud Whisper (whisper-large-v3-turbo) & LLM
+openai-whisper>=20231117          # OpenAI Whisper fallback
 torch>=2.2.0                      # PyTorch backend for Whisper
 torchaudio>=2.2.0                 # Audio utilities for PyTorch
 
 # ── Translation (Hindi → English) ─────────────────────────────────────────────
-deep-translator>=1.11.4           # Lightweight translation wrapper (Google backend)
+deep-translator>=1.11.4           # Translation wrapper (Google backend)
 
-# ── LLM Orchestration — LangChain LCEL + Multi-Provider ──────────────────
+# ── LLM Orchestration — LangChain LCEL + Multi-Provider ──────────────────────
 langchain>=0.2.0
 langchain-core>=0.2.0
 langchain-community>=0.2.0
-langchain-groq>=0.1.0                 # Ultra-fast Groq provider (Llama-3.3-70b)
-langchain-google-genai>=1.0.0         # Google Gemini provider (1M context window)
-langchain-mistralai>=0.1.0            # Mistral API provider
+langchain-groq>=0.1.0             # Groq provider (Llama-3.3-70b / Qwen)
+langchain-google-genai>=1.0.0     # Google Gemini fallback provider
+langchain-mistralai>=0.1.0        # Mistral API fallback provider
 mistralai>=0.4.0
 
-# ── RAG Pipeline ──────────────────────────────────────────────────────────────
+# ── RAG Pipeline & Vector Store ───────────────────────────────────────────────
 chromadb>=0.5.0                   # Local vector store
 langchain-chroma>=0.1.0           # LangChain Chroma integration
 sentence-transformers>=3.0.0      # HuggingFace embedding models
-langchain-huggingface>=0.0.3      # LangChain ↔ HuggingFace embeddings bridge
+langchain-huggingface>=0.0.3      # Embeddings bridge
 huggingface-hub>=0.23.0           # Model downloading from HuggingFace Hub
 tiktoken>=0.7.0                   # Token counting for text splitting
 
-# ── Backend API ───────────────────────────────────────────────────────────────
+# ── Backend API & Server ──────────────────────────────────────────────────────
 fastapi>=0.110.0
 uvicorn>=0.28.0
 
-# ── Streamlit UI (Legacy) ─────────────────────────────────────────────────────
-streamlit>=1.35.0
-streamlit-extras>=0.4.0           # Additional Streamlit widgets / utilities
-watchdog>=4.0.0                   # File-change watcher (improves Streamlit hot-reload)
-
-# ── PDF & TXT Export ──────────────────────────────────────────────────────────
+# ── Document & Export Utilities ───────────────────────────────────────────────
 reportlab>=4.2.0                  # PDF generation
-fpdf2>=2.7.9                      # Lightweight alternative PDF library
+fpdf2>=2.7.9                      # Lightweight PDF alternative
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
-python-dotenv>=1.0.0              # Load API keys from .env
+python-dotenv>=1.0.0              # Load environment variables
 numpy>=1.26.0
-tqdm>=4.66.0                      # Progress bars
+tqdm>=4.66.0
 requests>=2.32.0

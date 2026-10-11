@@ -37,7 +37,7 @@ COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 RUN mkdir -p data/downloads data/vector_db
 
 # Cloud environments dynamically assign $PORT
-ENV PORT=8000
+ENV PORT=8000 RENDER=true
 EXPOSE 8000
 
 # Start unified FastAPI server

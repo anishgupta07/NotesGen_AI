@@ -50,15 +50,23 @@ def transcribe_chunk_with_groq(chunk_path: str, api_key: str, language: str = "e
 
 
 def transcribe_chunk(chunk_path: str, language: str = "english", groq_api_key: Optional[str] = None) -> str:
-    """Transcribe chunk: prioritizes Groq cloud Whisper, falls back to local Whisper."""
-    # 1. Cloud Groq Whisper (Instant, $0 host cost, runs with 0 server RAM/CPU)
+    """Transcribe chunk: prioritizes Groq cloud Whisper, falls back to local Whisper only on local PCs."""
     active_key = groq_api_key or os.getenv("GROQ_API_KEY")
     if active_key:
         groq_text = transcribe_chunk_with_groq(chunk_path, active_key, language=language)
         if groq_text:
             return groq_text
 
-    # 2. Local Whisper fallback
+    # Cloud environments (Render, Railway, etc.) have strict 512MB RAM limits.
+    # Running local PyTorch Whisper on 512MB RAM triggers kernel OOM SIGKILL (502 Bad Gateway).
+    is_cloud = bool(os.getenv("RENDER") or os.getenv("RAILWAY_ENVIRONMENT"))
+    if is_cloud:
+        raise RuntimeError(
+            "Cloud transcription requires an active Groq API Key. "
+            "Please click 'Set Groq Key' in the top bar and paste your free Groq key."
+        )
+
+    # 2. Local Whisper fallback (for local development machines with sufficient RAM)
     model = load_local_model()
     task = "translate" if language.lower() in ["hinglish", "hindi"] else "transcribe"
     result = model.transcribe(chunk_path, task=task)

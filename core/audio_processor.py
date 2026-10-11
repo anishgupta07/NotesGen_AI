@@ -31,9 +31,10 @@ def download_youtube_audio(url: str) -> str:
     ffmpeg_exe = shutil.which("ffmpeg")
     ffmpeg_dir = os.path.dirname(ffmpeg_exe) if ffmpeg_exe else None
 
-    # Resilient multi-client strategy: try default smart resolver first (visionos, web), then fallbacks
+    # Resilient multi-client strategy: try android client first (bypasses EJS cipher challenges), then default, then web/mweb
     client_strategies = [
-        None,                                        # Default smart multi-client extraction
+        {"youtube": {"player_client": ["android"]}},  # Android client bypasses EJS cipher and provides direct audio
+        None,                                          # Default smart multi-client extraction (visionos/web)
         {"youtube": {"player_client": ["web"]}},
         {"youtube": {"player_client": ["mweb"]}},
         {"youtube": {"player_client": ["ios", "web"]}},

@@ -11,9 +11,10 @@ RUN npm run build
 # ── Stage 2: Python Backend & Unified Server ──────────────────────────────────
 FROM python:3.11-slim
 
-# Install system dependencies (ffmpeg for audio processing)
+# Install system dependencies (ffmpeg for audio processing, nodejs for yt-dlp JS runtime)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    nodejs \
     git \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -23,7 +24,8 @@ WORKDIR /app
 # Install Python requirements (install lightweight CPU-only PyTorch first to save ~2.5GB download and prevent build timeouts)
 COPY requirements.txt .
 RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -U yt-dlp
 
 # Copy backend application code
 COPY . .

@@ -4,14 +4,19 @@ import { TopNav } from './components/TopNav';
 import { HeroInput } from './components/HeroInput';
 import { NotesViewer } from './components/NotesViewer';
 import { ChatBox } from './components/ChatBox';
+import { AuthModal } from './components/AuthModal';
+import { KeySettingsModal } from './components/KeySettingsModal';
 import {
   fetchChats,
   fetchChatById,
   requestGenerateNotes,
   sendChatMessage,
   deleteChatSession,
+  fetchCurrentUser,
+  removeToken,
+  getToken,
 } from './api';
-import { ChatSummary, ChatDetail, ChatMessage } from './types';
+import { ChatSummary, ChatDetail, ChatMessage, User } from './types';
 import {
   Sparkles,
   Loader2,
@@ -21,6 +26,10 @@ import {
 } from 'lucide-react';
 
 export const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [activeChat, setActiveChat] = useState<ChatDetail | null>(null);
@@ -36,10 +45,27 @@ export const App: React.FC = () => {
   // Sidebar state: open by default on desktop, collapsible for full screen
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Load chat history on initial mount
+  // Check auth and load user profile on startup
   useEffect(() => {
-    loadChatList();
+    initAuthAndChats();
   }, []);
+
+  const initAuthAndChats = async () => {
+    const token = getToken();
+    if (!token) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    try {
+      const user = await fetchCurrentUser();
+      setCurrentUser(user);
+      loadChatList();
+    } catch {
+      removeToken();
+      setCurrentUser(null);
+      setIsAuthModalOpen(true);
+    }
+  };
 
   const loadChatList = async () => {
     try {
@@ -50,6 +76,32 @@ export const App: React.FC = () => {
       console.error('Failed to fetch chats:', err);
     } finally {
       setIsLoadingChats(false);
+    }
+  };
+
+  const handleAuthSuccess = (user: User) => {
+    setCurrentUser(user);
+    loadChatList();
+    if (!user.has_groq_key) {
+      setIsKeyModalOpen(true);
+    }
+  };
+
+  const handleLogout = () => {
+    removeToken();
+    setCurrentUser(null);
+    setChats([]);
+    setActiveChatId(null);
+    setActiveChat(null);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleKeyUpdated = async () => {
+    try {
+      const user = await fetchCurrentUser();
+      setCurrentUser(user);
+    } catch (err) {
+      console.error('Failed to refresh user profile:', err);
     }
   };
 
@@ -97,6 +149,16 @@ export const App: React.FC = () => {
     startTime?: string,
     endTime?: string
   ) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    if (!currentUser.has_groq_key) {
+      setIsKeyModalOpen(true);
+      setErrorMessage('Please configure your free Groq API key in the settings modal to generate notes.');
+      return;
+    }
+
     try {
       setIsGenerating(true);
       setErrorMessage(null);
@@ -113,6 +175,7 @@ export const App: React.FC = () => {
       setChats((prev) => [
         {
           id: result.id,
+          user_id: result.user_id,
           title: result.title,
           video_url: result.video_url,
           language: result.language,
@@ -132,6 +195,14 @@ export const App: React.FC = () => {
 
   // Send a chat message for the active video session
   const handleSendChatMessage = async (question: string) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    if (!currentUser.has_groq_key) {
+      setIsKeyModalOpen(true);
+      return;
+    }
     if (!activeChat) return;
 
     // Optimistically add user message
@@ -169,6 +240,19 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#090a0c] text-[#f1f3f7] font-['Plus_Jakarta_Sans',sans-serif] antialiased">
+      {/* Auth & Key Management Modals */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+      />
+      <KeySettingsModal
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+        hasGroqKey={Boolean(currentUser?.has_groq_key)}
+        onKeyUpdated={handleKeyUpdated}
+      />
+
       {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
         <div
@@ -177,7 +261,7 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* Sidebar: Smooth transition for collapsible full-screen reading */}
+      {/* Sidebar: Private chat history per user */}
       <div
         className={`fixed inset-y-0 left-0 z-50 transform md:relative md:translate-x-0 transition-all duration-300 ease-in-out shrink-0 ${
           sidebarOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full md:translate-x-0 overflow-hidden'
@@ -195,7 +279,7 @@ export const App: React.FC = () => {
 
       {/* Main Content Workspace */}
       <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden bg-[#090a0c]">
-        {/* Top Navigation: Now includes New Video and View Mode toggles to eliminate extra row */}
+        {/* Top Navigation */}
         <TopNav
           isSidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -203,6 +287,10 @@ export const App: React.FC = () => {
           onNewChat={handleNewChat}
           viewMode={viewMode}
           onSetViewMode={setViewMode}
+          user={currentUser}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
+          onOpenKeySettings={() => setIsKeyModalOpen(true)}
+          onLogout={handleLogout}
         />
 
         {/* Global Error Banner */}
@@ -239,7 +327,7 @@ export const App: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 text-xs font-semibold text-[#ff4d66] bg-[#1a0b10] border border-[#35141c] px-3.5 py-1.5 rounded-full">
                 <Sparkles className="w-3.5 h-3.5 animate-pulse text-[#ff2442]" />
-                <span>Powered by Groq High-Speed Inference</span>
+                <span>Powered by Groq High-Speed Inference (BYOK)</span>
               </div>
             </div>
           ) : isLoadingDetail ? (
@@ -248,7 +336,7 @@ export const App: React.FC = () => {
               <Loader2 className="w-7 h-7 animate-spin text-[#ff2442]" />
             </div>
           ) : activeChat ? (
-            /* Active Notes & Chat View: Panes start directly under TopNav with zero wasted space! */
+            /* Active Notes & Chat View */
             <div className="h-full flex overflow-hidden relative">
               {/* Notes Pane */}
               <div

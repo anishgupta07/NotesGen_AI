@@ -4,7 +4,7 @@ from core.llm import get_llm
 from langchain_core.messages import SystemMessage, HumanMessage
 
 
-def check_video_educational(transcript_sample: str, title: str = "") -> tuple[bool, str]:
+def check_video_educational(transcript_sample: str, title: str = "", groq_api_key: str = None) -> tuple[bool, str]:
     """
     Guardrail to ensure only educational or academic videos generate notes.
     Uses lightweight token budgeting to avoid consuming primary model quota.
@@ -47,7 +47,7 @@ Output MUST be strictly valid JSON:
 
     try:
         # Use Qwen or 20b model with max_tokens=150 to preserve 120b token quota
-        llm = get_llm(temperature=0.0, model="qwen/qwen3.8-27b", max_tokens=150)
+        llm = get_llm(temperature=0.0, model="qwen/qwen3.8-27b", max_tokens=150, api_key=groq_api_key)
         response = llm.invoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_content)

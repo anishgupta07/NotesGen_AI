@@ -14,8 +14,8 @@ def split_transcript(transcript: str) -> list:
     return splitter.split_text(transcript)
 
 
-def summarize(transcript: str) -> str:
-    llm = get_llm()
+def summarize(transcript: str, groq_api_key: str = None) -> str:
+    llm = get_llm(api_key=groq_api_key)
 
     map_prompt = ChatPromptTemplate.from_messages(
         [
@@ -48,8 +48,8 @@ def summarize(transcript: str) -> str:
     return combined_chain.invoke(combined)
 
 
-def generate_title(transcript: str) -> str:
-    llm = get_llm(model="qwen/qwen3.8-27b", max_tokens=40, temperature=0.2)
+def generate_title(transcript: str, groq_api_key: str = None) -> str:
+    llm = get_llm(model="qwen/qwen3.8-27b", max_tokens=40, temperature=0.2, api_key=groq_api_key)
 
     title_chain = (
         RunnablePassthrough() | RunnableLambda(lambda x: {"text": x}) | 

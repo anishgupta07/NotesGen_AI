@@ -1,4 +1,5 @@
 import time
+from typing import Optional
 from langchain_core.output_parsers import StrOutputParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from core.llm import get_llm
@@ -20,7 +21,12 @@ def get_prompt_by_style(style: str):
     return DETAILED_NOTES_PROMPT  # Default: detailed notes
 
 
-def invoke_chain_with_rate_limit_protection(chain, payload: dict, max_retries: int = 3) -> str:
+def invoke_chain_with_rate_limit_protection(
+    chain,
+    payload: dict,
+    max_retries: int = 3,
+    groq_api_key: Optional[str] = None
+) -> str:
     """Invokes chain with automatic retry, backoff, and fallback handling for TPM limits."""
     for attempt in range(max_retries):
         try:
@@ -34,7 +40,12 @@ def invoke_chain_with_rate_limit_protection(chain, payload: dict, max_retries: i
                 # On last retry, try with fast fallback model
                 if attempt == max_retries - 2:
                     try:
-                        fallback_llm = get_llm(temperature=0.2, model="qwen/qwen3.8-27b", max_tokens=SAFE_MAX_TOKENS)
+                        fallback_llm = get_llm(
+                            temperature=0.2,
+                            model="qwen/qwen3.8-27b",
+                            max_tokens=SAFE_MAX_TOKENS,
+                            api_key=groq_api_key
+                        )
                         fallback_chain = payload.get("__prompt__", DETAILED_NOTES_PROMPT) | fallback_llm | StrOutputParser()
                         return fallback_chain.invoke(payload)
                     except Exception:
@@ -47,25 +58,25 @@ def invoke_chain_with_rate_limit_protection(chain, payload: dict, max_retries: i
 def generate_video_notes(
     transcript: str,
     style: str = "detailed",
-    language: str = "hinglish"
+    language: str = "hinglish",
+    groq_api_key: Optional[str] = None
 ) -> str:
     """Generate structured educational notes from video transcript in English or Hinglish.
-    Respects Groq 8,000 TPM limit via chunked token budgeting and automatic model fallbacks."""
-    llm = get_llm(temperature=0.2, max_tokens=SAFE_MAX_TOKENS, enable_fallbacks=True)
+    Uses the authenticated user's BYOK Groq API key and respects TPM limits."""
+    llm = get_llm(temperature=0.2, max_tokens=SAFE_MAX_TOKENS, enable_fallbacks=True, api_key=groq_api_key)
     prompt = get_prompt_by_style(style)
     chain = prompt | llm | StrOutputParser()
     lang_inst = get_language_instruction(language)
 
-    # 1. Single-chunk execution for short/medium clips (up to 4,500 chars ~ 1,100 tokens)
+    # 1. Single-chunk execution for short/medium clips (up to 4,200 chars ~ 1,000 tokens)
     if len(transcript) <= SAFE_CHUNK_SIZE:
         return invoke_chain_with_rate_limit_protection(chain, {
             "text": transcript,
             "language_instruction": lang_inst,
             "__prompt__": prompt,
-        })
+        }, groq_api_key=groq_api_key)
 
     # 2. Multi-chunk timeline breakdown for longer videos
-    # Splits into ~4-6 minute timeline segments (~4,200 chars each)
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=SAFE_CHUNK_SIZE,
         chunk_overlap=300,
@@ -80,7 +91,7 @@ def generate_video_notes(
             "text": chunk,
             "language_instruction": lang_inst,
             "__prompt__": prompt,
-        })
+        }, groq_api_key=groq_api_key)
         section_notes.append(section_note)
 
         # Brief pause between chunks to let Groq's per-minute token bucket replenish

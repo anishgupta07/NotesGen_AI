@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -8,12 +9,14 @@ def get_llm(
     temperature: float = 0.2,
     model: str = None,
     max_tokens: int = 1500,
-    enable_fallbacks: bool = True
+    enable_fallbacks: bool = True,
+    api_key: Optional[str] = None,
 ):
     """Factory function returning the best available LLM with automatic rate limit fallback.
     Default: Groq openai/gpt-oss-120b with fallback to qwen/qwen3.8-27b and openai/gpt-oss-20b.
+    Accepts custom BYOK Groq API key per user so the host pays $0 for LLM inference.
     """
-    groq_api_key = os.getenv("GROQ_API_KEY")
+    groq_api_key = api_key or os.getenv("GROQ_API_KEY")
     if groq_api_key:
         from langchain_groq import ChatGroq
 
@@ -83,5 +86,5 @@ def get_llm(
         )
 
     raise ValueError(
-        "❌ No LLM API key found! Please set GROQ_API_KEY in your .env file."
+        "❌ No LLM API key found! Please configure your personal Groq API key in Settings."
     )

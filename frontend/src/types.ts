@@ -1,5 +1,18 @@
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  has_groq_key: boolean;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
 export interface ChatSummary {
   id: string;
+  user_id?: string;
   title: string;
   video_url: string;
   language: 'hinglish' | 'english';

@@ -59,12 +59,13 @@ def query_isolated_rag(
     question: str,
     video_title: str,
     language: str = "english",
-    recent_history: list = None
+    recent_history: list = None,
+    groq_api_key: str = None
 ) -> str:
     """Query the isolated RAG engine with strict topic guardrails, speaker analogy preservation, and Hinglish fidelity."""
     vector_store = load_isolated_vector_store(chat_id)
     retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
-    llm = get_llm(temperature=0.2)
+    llm = get_llm(temperature=0.2, api_key=groq_api_key)
 
     history_context = ""
     if recent_history:

@@ -1,39 +1,89 @@
 import os
-import whisper
+from typing import Optional, List
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
-_model = None
+_local_model = None
 
 
-def load_model():
-    """Load local OpenAI Whisper model lazily."""
-    global _model
-    if _model is None:
+def load_local_model():
+    """Load local OpenAI Whisper model lazily only when needed."""
+    global _local_model
+    if _local_model is None:
+        import whisper
         print(f"Loading local Whisper model: {WHISPER_MODEL} ...")
-        _model = whisper.load_model(WHISPER_MODEL)
-        print("Whisper model loaded.")
-    return _model
+        _local_model = whisper.load_model(WHISPER_MODEL)
+        print("Local Whisper model loaded.")
+    return _local_model
 
 
-def transcribe_chunk(chunk_path: str, language: str = "english") -> str:
-    """Transcribe an audio chunk using local Whisper without needing any external API keys."""
-    model = load_model()
-    # For Indian languages/Hindi audio, Whisper translate converts to English text automatically
+def transcribe_chunk_with_groq(chunk_path: str, api_key: str, language: str = "english") -> Optional[str]:
+    """Transcribe audio chunk using Groq's high-speed cloud Whisper API (whisper-large-v3-turbo)."""
+    try:
+        from groq import Groq
+        client = Groq(api_key=api_key)
+        is_hindi = language.lower() in ["hinglish", "hindi"]
+
+        with open(chunk_path, "rb") as f:
+            file_tuple = (os.path.basename(chunk_path), f.read())
+
+        # If audio is Hindi/Hinglish, translations endpoint converts speech to English text automatically
+        if is_hindi:
+            res = client.audio.translations.create(
+                file=file_tuple,
+                model="whisper-large-v3-turbo",
+                response_format="text",
+            )
+        else:
+            res = client.audio.transcriptions.create(
+                file=file_tuple,
+                model="whisper-large-v3-turbo",
+                response_format="text",
+                language="en",
+            )
+
+        if isinstance(res, str):
+            return res
+        return getattr(res, "text", str(res))
+    except Exception as e:
+        print(f"Groq cloud transcription notice ({e}). Falling back to local Whisper.")
+        return None
+
+
+def transcribe_chunk(chunk_path: str, language: str = "english", groq_api_key: Optional[str] = None) -> str:
+    """Transcribe chunk: prioritizes Groq cloud Whisper, falls back to local Whisper."""
+    # 1. Cloud Groq Whisper (Instant, $0 host cost, runs with 0 server RAM/CPU)
+    active_key = groq_api_key or os.getenv("GROQ_API_KEY")
+    if active_key:
+        groq_text = transcribe_chunk_with_groq(chunk_path, active_key, language=language)
+        if groq_text:
+            return groq_text
+
+    # 2. Local Whisper fallback
+    model = load_local_model()
     task = "translate" if language.lower() in ["hinglish", "hindi"] else "transcribe"
     result = model.transcribe(chunk_path, task=task)
     return result.get("text", "")
 
 
-def transcribe_all(chunks: list, language: str = "english", auto_cleanup: bool = True) -> str:
-    """Transcribe all chunks using local Whisper and automatically remove temporary files to free disk space."""
+def transcribe_all(
+    chunks: list,
+    language: str = "english",
+    auto_cleanup: bool = True,
+    groq_api_key: Optional[str] = None
+) -> str:
+    """Transcribe all chunks with automatic temp file cleanup and fallback protection."""
     full_transcript = ""
-    print(f"Using local Whisper ({WHISPER_MODEL}) for speech transcription.")
+    active_key = groq_api_key or os.getenv("GROQ_API_KEY")
+    if active_key:
+        print("Using Groq Cloud Whisper (whisper-large-v3-turbo) for ultra-fast cloud transcription.")
+    else:
+        print(f"Using local Whisper ({WHISPER_MODEL}) for speech transcription.")
 
     try:
         for i, chunk in enumerate(chunks):
             print(f"Transcribing chunk {i + 1}/{len(chunks)}...")
             try:
-                text = transcribe_chunk(chunk, language=language)
+                text = transcribe_chunk(chunk, language=language, groq_api_key=groq_api_key)
                 full_transcript += text + " "
             finally:
                 if auto_cleanup and os.path.exists(chunk):

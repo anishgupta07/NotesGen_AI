@@ -24,8 +24,7 @@ Create a `.env` file in the root directory:
 ```env
 GROQ_API_KEY=your_groq_api_key          # Primary high-speed LLM engine
 MISTRAL_API_KEY=your_mistral_api_key    # Optional fallback provider
-SARVAM_API_KEY=your_sarvam_api_key      # Required for Hinglish speech transcription
-WHISPER_MODEL=small                     # Local Whisper model size (base, small, medium)
+WHISPER_MODEL=small                     # Local Whisper model size (base, small, medium) - no API key needed!
 ```
 
 ### 2. Install Dependencies

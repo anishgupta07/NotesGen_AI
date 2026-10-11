@@ -7,7 +7,7 @@
 **NotesGen AI** is an intelligent, end-to-end study platform for processing educational YouTube videos and multimedia lectures. It transcribes speech, validates educational relevance via guardrails, extracts 100% topic concept cruxes with speaker analogies, indexes content into a vector database, and allows users to chat with the video notes using topic-isolated Retrieval-Augmented Generation (RAG).
 
 ### Key Technologies
-* **Speech-to-Text**: Local OpenAI Whisper (`small` model) for English; Sarvam AI API (`saaras:v2.5`) for Hinglish/Hindi with English translation.
+* **Speech-to-Text**: Local OpenAI Whisper (`small` model) running locally on CPU/GPU without external API keys. Fast subtitle extraction via `youtube_transcript_api`.
 * **Audio Processing**: `yt-dlp` (YouTube audio extraction), `pydub` / `ffmpeg` (format conversion and audio chunking).
 * **LLM & Orchestration**: Groq (`openai/gpt-oss-120b`, `qwen/qwen3.8-27b`, `openai/gpt-oss-20b`) & LangChain LCEL.
 * **Vector Store & Embeddings**: HuggingFace `all-MiniLM-L6-v2` embeddings and ChromaDB vector store.
@@ -26,10 +26,8 @@ flowchart TD
     B2 --> B3
     B3 --> C["Transcriber (core/transcriber.py)"]
     
-    C -->|English| C1["Local OpenAI Whisper Model"]
-    C -->|Hinglish| C2["Sarvam AI API (25s slices)"]
+    C --> C1["Local OpenAI Whisper (Multilingual Speech-to-Text)"]
     C1 --> D["Full Combined Transcript"]
-    C2 --> D
     
     D --> E["Title & Guardrail (core/summarizer.py & core/guardrail.py)"]
     D --> F["Smart Notes Engine (core/notes_generator.py)"]
@@ -145,116 +143,62 @@ def process_input(source: str) -> list:
 #### Purpose & Logic:
 Provides speech-to-text transcription with a dual-engine architecture:
 1. `load_model()`: Lazily loads the local OpenAI Whisper model (cached in global `_model` to prevent reloading across chunks).
-2. `transcribe_chunk_whisper(chunk_path)`: Transcribes an audio chunk locally using Whisper.
-3. `_send_to_sarvam(piece_path)`: Sends a $\le 30$-second audio piece to Sarvam AI's speech-to-text translate REST endpoint.
-4. `transcribe_chunk_sarvam(chunk_path)`: Handles Sarvam AI's 30-second duration limit by slicing each 10-minute chunk into 25-second pieces, sending each piece, and concatenating the translated English text.
-5. `transcribe_chunk()` & `transcribe_all()`: Iterates through all chunks and stitches the texts into a unified, complete transcript.
+2. `transcribe_chunk(chunk_path, language)`: Transcribes an audio chunk locally using Whisper. If `language='hinglish'`, Whisper's translation task converts Indian speech to English text cleanly.
+3. `transcribe_all(chunks, language, auto_cleanup=True)`: Iterates through all chunks, transcribes them, and automatically deletes each chunk file right after it is transcribed so disk space remains completely free.
 
 #### Code:
 ```python
-import whisper
 import os
-import requests
-from pydub import AudioSegment
-
-# Sarvam's sync STT-translate API rejects audio longer than 30s.
-# We slice each chunk into 25s pieces (with a 5s safety margin) before sending.
-SARVAM_PIECE_SECONDS = 25
+import whisper
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
-SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
-SARVAM_STT_TRANSLATE_URL = "https://api.sarvam.ai/speech-to-text-translate"
-SARVAM_MODEL = os.getenv("SARVAM_STT_MODEL", "saaras:v2.5")
-
 _model = None
 
+
 def load_model():
-    global _model  
-    if _model is None: 
-        print(f"Loading Whisper model: {WHISPER_MODEL} ...")
-        _model = whisper.load_model(WHISPER_MODEL) 
+    """Load local OpenAI Whisper model lazily."""
+    global _model
+    if _model is None:
+        print(f"Loading local Whisper model: {WHISPER_MODEL} ...")
+        _model = whisper.load_model(WHISPER_MODEL)
         print("Whisper model loaded.")
-    return _model 
-
-
-def transcribe_chunk_whisper(chunk_path: str) -> str:
-    model = load_model()  
-    result = model.transcribe(chunk_path, task="transcribe")  
-    return result["text"]  
-
-
-def _send_to_sarvam(piece_path: str) -> str:
-    """Send one <=30s WAV file to Sarvam and return the English transcript."""
-    headers = {"api-subscription-key": SARVAM_API_KEY}
-
-    with open(piece_path, "rb") as f:
-        files = {"file": (os.path.basename(piece_path), f, "audio/wav")}
-        data = {"model": SARVAM_MODEL, "with_diarization": "false"}
-        response = requests.post(
-            SARVAM_STT_TRANSLATE_URL,
-            headers=headers,
-            files=files,
-            data=data,
-            timeout=120,
-        )
-
-    if not response.ok:
-        print(f"\n❌ Sarvam returned {response.status_code}")
-        print(f"Response body: {response.text}\n")
-        response.raise_for_status()
-
-    return response.json().get("transcript", "")
-
-
-def transcribe_chunk_sarvam(chunk_path: str) -> str:
-    """
-    Sarvam sync API only accepts <=30s audio. We split this chunk into
-    25-second pieces, send each separately, and join the transcripts.
-    """
-    if not SARVAM_API_KEY:
-        raise RuntimeError("SARVAM_API_KEY is not set in environment / .env")
-
-    audio = AudioSegment.from_wav(chunk_path)
-    piece_ms = SARVAM_PIECE_SECONDS * 1000
-
-    full_text = ""
-    total_pieces = (len(audio) + piece_ms - 1) // piece_ms
-
-    for i, start in enumerate(range(0, len(audio), piece_ms)):
-        piece = audio[start: start + piece_ms]
-        piece_path = f"{chunk_path}_sv_{i}.wav"
-        piece.export(piece_path, format="wav")
-
-        try:
-            print(f"  -> Sarvam piece {i + 1}/{total_pieces} ...")
-            full_text += _send_to_sarvam(piece_path) + " "
-        finally:
-            if os.path.exists(piece_path):
-                os.remove(piece_path)
-
-    return full_text.strip()
+    return _model
 
 
 def transcribe_chunk(chunk_path: str, language: str = "english") -> str:
-    """
-    Route one chunk to Whisper or Sarvam depending on language choice.
-    - english  -> Whisper (local model)
-    - hinglish -> Sarvam (translates to English while transcribing)
-    """
-    if language.lower() == "hinglish":
-        return transcribe_chunk_sarvam(chunk_path)
-    return transcribe_chunk_whisper(chunk_path)
+    """Transcribe an audio chunk using local Whisper without needing any external API keys."""
+    model = load_model()
+    task = "translate" if language.lower() in ["hinglish", "hindi"] else "transcribe"
+    result = model.transcribe(chunk_path, task=task)
+    return result.get("text", "")
 
 
-def transcribe_all(chunks: list, language: str = "english") -> str:
-    full_transcript = "" 
-    engine = "Sarvam AI" if language.lower() == "hinglish" else "Whisper"
-    print(f"Using {engine} for transcription.")
+def transcribe_all(chunks: list, language: str = "english", auto_cleanup: bool = True) -> str:
+    """Transcribe all chunks using local Whisper and automatically remove temporary files to free disk space."""
+    full_transcript = ""
+    print(f"Using local Whisper ({WHISPER_MODEL}) for speech transcription.")
 
-    for i, chunk in enumerate(chunks):  
-        print(f"Transcribing chunk {i + 1}/{len(chunks)}...")
-        text = transcribe_chunk(chunk, language=language)  
-        full_transcript += text + " "  
+    try:
+        for i, chunk in enumerate(chunks):
+            print(f"Transcribing chunk {i + 1}/{len(chunks)}...")
+            try:
+                text = transcribe_chunk(chunk, language=language)
+                full_transcript += text + " "
+            finally:
+                if auto_cleanup and os.path.exists(chunk):
+                    try:
+                        os.remove(chunk)
+                        print(f"Deleted temporary audio chunk: {os.path.basename(chunk)}")
+                    except Exception as e:
+                        print(f"Warning: could not remove chunk {chunk}: {e}")
+    finally:
+        if auto_cleanup:
+            for remaining in chunks:
+                if os.path.exists(remaining):
+                    try:
+                        os.remove(remaining)
+                    except Exception:
+                        pass
 
     print("Transcription complete.")
     return full_transcript.strip()

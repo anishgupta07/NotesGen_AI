@@ -7,7 +7,7 @@ from core.summarizer import generate_title
 from core.notes_generator import generate_video_notes
 from core.youtube_helper import get_youtube_transcript_with_timestamps, filter_transcript_by_timeline
 from core.guardrail import check_video_educational
-from rag.rag_engine import build_rag_chain, ask_question
+from rag.isolated_engine import build_isolated_vector_store, query_isolated_rag
 
 load_dotenv()
 
@@ -425,16 +425,18 @@ if run_btn:
             notes = generate_video_notes(transcript_to_use, style=note_style, language=language)
             update_step("notes", "done")
 
-            # 7. Build RAG Engine
+            # 7. Build Isolated Vector Store
             update_step("rag", "active")
-            rag_chain = build_rag_chain(transcript_to_use)
+            chat_id = "streamlit_session"
+            build_isolated_vector_store(chat_id, transcript_to_use)
             update_step("rag", "done")
 
             st.session_state.result = {
+                "chat_id": chat_id,
                 "title": title,
                 "transcript": transcript_to_use,
                 "notes": notes,
-                "rag_chain": rag_chain,
+                "language": language,
             }
 
             st.session_state.pipeline_done = True
@@ -524,7 +526,13 @@ if st.session_state.result:
 
     if send_btn and user_input.strip():
         with st.spinner("Analyzing transcript…"):
-            answer = ask_question(r["rag_chain"], user_input.strip())
+            answer = query_isolated_rag(
+                chat_id=r.get("chat_id", "streamlit_session"),
+                question=user_input.strip(),
+                video_title=r["title"],
+                language=r.get("language", "hinglish"),
+                recent_history=st.session_state.chat_history,
+            )
         st.session_state.chat_history.append({"role": "user",      "content": user_input.strip()})
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
         st.rerun()

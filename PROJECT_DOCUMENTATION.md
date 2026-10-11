@@ -31,22 +31,20 @@ flowchart TD
     C1 --> D["Full Combined Transcript"]
     C2 --> D
     
-    D --> E["Summarizer & Title (core/summarizer.py)"]
-    D --> F["Information Extractor (core/extractor.py)"]
-    D --> G["Vector Store & RAG (core/vector_store.py & core/rag_engine.py)"]
+    D --> E["Title & Guardrail (core/summarizer.py & core/guardrail.py)"]
+    D --> F["Smart Notes Engine (core/notes_generator.py)"]
+    D --> G["Topic-Isolated RAG (rag/isolated_engine.py)"]
     
-    E -->|Map-Reduce| E1["Executive Summary & Title"]
-    F --> F1["Action Items (Owner, Deadline)"]
-    F --> F2["Key Decisions"]
-    F --> F3["Open Questions"]
+    E --> E1["Academic Validation & Short Title"]
+    F --> F1["100% Concept Crux + Speaker Analogies"]
+    F --> F2["Timeline Notes & Cheat Sheet"]
     
-    G --> G1["ChromaDB Vector Store (MiniLM Embeddings)"]
-    G1 --> G2["RAG Q&A Chain (Mistral AI)"]
+    G --> G1["ChromaDB Isolated Collection (MiniLM Embeddings)"]
+    G1 --> G2["Topic-Guarded RAG Q&A (Groq LLM)"]
     
-    E1 --> H["User Interface (Streamlit app.py / CLI main.py)"]
+    E1 --> H["User Interface (React SPA / FastAPI server.py / main.py / app.py)"]
     F1 --> H
     F2 --> H
-    F3 --> H
     G2 --> H
 ```
 
@@ -338,259 +336,130 @@ def generate_title(transcript: str) -> str:
 
 ---
 
-### File 4: `core/extractor.py`
+### File 4: `core/notes_generator.py`
 
 #### Purpose & Logic:
-Extracts targeted educational intelligence using LangChain Expression Language (LCEL) chains:
-1. `build_chain(system_prompt)`: Creates a reusable LCEL chain connecting the prompt template, Groq LLM (temperature 0.2 for deterministic extraction), and string output parser.
-2. `extract_key_concepts(transcript)`: Extracts core principles, definitions, and speaker analogies.
-3. `extract_action_items(transcript)`: Extracts practical exercises, practice tasks, and homework assigned in the video.
-4. `extract_key_decisions(transcript)`: Identifies major takeaways and conclusions established.
-5. `extract_questions(transcript)`: Lists open study questions and thought experiments for learners.
+Generates comprehensive study notes and cheat sheets from transcripts:
+1. `get_prompt_by_style(style)`: Selects between `DETAILED_NOTES_PROMPT` (100% concept crux, speaker analogies, note-down points) and `CHEATSHEET_PROMPT`.
+2. `generate_video_notes(transcript, style, language)`: Performs safe token-budgeted generation under Groq's 8,000 TPM limit. Handles single-chunk execution for short videos and multi-chunk combined execution for longer lectures, with multi-model fallback (`openai/gpt-oss-120b` -> `qwen/qwen3.8-27b` -> `openai/gpt-oss-20b`).
+3. `invoke_chain_with_rate_limit_protection`: Automatic retry and exponential backoff on TPM/rate limit errors.
 
 #### Code:
 ```python
-from langchain_core.prompts import ChatPromptTemplate
+import time
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-from core.llm import get_llm
-import os 
-
-
-def build_chain(system_prompt: str):
-    llm = get_llm(temperature=0.2)
-    return (
-        RunnablePassthrough() | RunnableLambda(lambda x: {"text": x}) | ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", "{text}"),
-        ]) | llm | StrOutputParser()
-    )
-
-
-def extract_key_concepts(transcript: str) -> str:
-    """Extract primary educational concepts and definitions from video transcript."""
-    chain = build_chain(
-        "You are an expert video study analyst. From the video transcript, "
-        "extract the core concepts, principles, and key definitions covered. "
-        "For each concept, explain its crux and any analogy used by the speaker. "
-        "Format as a structured numbered list."
-    )
-    return chain.invoke(transcript)
-
-
-def extract_action_items(transcript: str) -> str:
-    """Extract practical exercises, steps, or homework mentioned in the video."""
-    chain = build_chain(
-        "You are an expert educational coach. From the video transcript, "
-        "extract all practical exercises, action steps, or practice tasks mentioned for learners:\n"
-        "- Task / Exercise description\n"
-        "- Suggested approach or tool\n\n"
-        "Format as a numbered list. If none found say 'No specific practice tasks assigned.'"
-    )
-    return chain.invoke(transcript)
-
-
-def extract_key_decisions(transcript: str) -> str:
-    """Extract key takeaways and conclusions from the video."""
-    chain = build_chain(
-        "You are an expert educational analyst. From the video transcript, "
-        "extract all major takeaways, conclusions, and core lessons established. "
-        "Format as a numbered list. If none found say 'No key conclusions found.'"
-    )
-    return chain.invoke(transcript)
-
-
-def extract_questions(transcript: str) -> str:
-    """Extract self-study questions or practice questions from the video."""
-    chain = build_chain(
-        "From the video transcript, extract important questions raised, self-test questions, "
-        "or thought experiments that test understanding of the material. "
-        "Format as a numbered list. If none found say 'No open questions found.'"
-    )
-    return chain.invoke(transcript)
-```
-
----
-
-### File 5: `core/vector_store.py`
-
-#### Purpose & Logic:
-Manages the vector database for RAG retrieval:
-1. `get_embeddings()`: Initializes HuggingFace embeddings (`all-MiniLM-L6-v2`) running on CPU locally.
-2. `build_vector_store(transcript)`: Splits the raw transcript into 500-character chunks (50-character overlap), generates embeddings, and persists them into a local Chroma vector database (`vector_db/` directory).
-3. `load_vector_store()`: Loads the existing persisted Chroma database from disk.
-4. `get_retriever(vector_store, k=4)`: Converts the Chroma store into a similarity retriever retrieving the top $k=4$ most relevant chunks.
-
-#### Code:
-```python
-import os 
-from langchain_chroma import Chroma 
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
+from core.llm import get_llm
+from core.prompts import (
+    DETAILED_NOTES_PROMPT,
+    CHEATSHEET_PROMPT,
+    get_language_instruction,
+)
 
-CHROMA_DIR = "vector_db"
-COLLECTION_NAME = "video_transcript"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-
-
-def get_embeddings():
-    return HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL,
-        model_kwargs={"device": 'cpu'}
-    )
+SAFE_CHUNK_SIZE = 4200
+SAFE_MAX_TOKENS = 1400
 
 
-def build_vector_store(transcript: str) -> Chroma:
-    print("Building vector Store")
+def get_prompt_by_style(style: str):
+    if style in ["cheatsheet", "cheat_sheet"]:
+        return CHEATSHEET_PROMPT
+    return DETAILED_NOTES_PROMPT
 
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=50
-    )
+
+def generate_video_notes(transcript: str, style: str = "detailed", language: str = "hinglish") -> str:
+    llm = get_llm(temperature=0.2, max_tokens=SAFE_MAX_TOKENS, enable_fallbacks=True)
+    prompt = get_prompt_by_style(style)
+    chain = prompt | llm | StrOutputParser()
+    lang_inst = get_language_instruction(language)
+
+    if len(transcript) <= SAFE_CHUNK_SIZE:
+        return chain.invoke({"transcript": transcript, "language_instruction": lang_inst})
+
+    # Chunked processing for long videos
+    splitter = RecursiveCharacterTextSplitter(chunk_size=SAFE_CHUNK_SIZE, chunk_overlap=200)
     chunks = splitter.split_text(transcript)
-
-    docs = [
-        Document(page_content=chunk, metadata={'chunk_index': i})
-        for i, chunk in enumerate(chunks)
-    ]
-
-    embeddings = get_embeddings()
-    vector_store = Chroma.from_documents(
-        documents=docs,
-        embedding=embeddings,
-        collection_name=COLLECTION_NAME,
-        persist_directory=CHROMA_DIR
-    )
-
-    return vector_store
-
-
-def load_vector_store() -> Chroma:
-    embeddings = get_embeddings()
-    vector_store = Chroma(
-        collection_name=COLLECTION_NAME,
-        embedding_function=embeddings,
-        persist_directory=CHROMA_DIR
-    )
-    return vector_store
-
-
-def get_retriever(vector_store: Chroma, k: int = 4):
-    return vector_store.as_retriever(
-        search_type='similarity',
-        search_kwargs={"k": k}
-    )
+    chunk_notes = [chain.invoke({"transcript": chunk, "language_instruction": lang_inst}) for chunk in chunks]
+    return "\n\n---\n\n".join(chunk_notes)
 ```
 
 ---
 
-### File 6: `core/rag_engine.py`
+### File 5: `rag/isolated_engine.py`
 
 #### Purpose & Logic:
-Implements the Retrieval-Augmented Generation (RAG) conversational pipeline:
-1. `format_docs(docs)`: Combines retrieved Chroma chunks into a clean context string.
-2. `build_rag_chain(transcript)`: Indexes the transcript and creates an LCEL RAG chain. The system prompt restricts answers strictly to the provided transcript context, guarding against hallucinations.
-3. `ask_question(rag_chain, question)`: Invokes the chain with a user query and returns the assistant's answer.
+Provides topic-isolated, per-chat Retrieval-Augmented Generation (RAG):
+1. `build_isolated_vector_store(chat_id, transcript)`: Generates chunk embeddings and stores them in a dedicated Chroma collection `c_{chat_id}` under `data/vector_db/`.
+2. `load_isolated_vector_store(chat_id)`: Loads the chat's private collection.
+3. `query_isolated_rag(chat_id, question, video_title, language, recent_history)`: Queries the isolated collection. Features strict topic restriction (politely deflecting off-topic queries), speaker analogy preservation, and natural Hinglish/English responses.
 
 #### Code:
 ```python
 import os
-from langchain_mistralai import ChatMistralAI
+from pathlib import Path
+from langchain_chroma import Chroma
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-from core.vector_store import build_vector_store, load_vector_store, get_retriever
+from rag.embeddings import get_embeddings
+from core.llm import get_llm
+
+CHROMA_DIR = str(Path(__file__).resolve().parent.parent / "data" / "vector_db")
 
 
-def get_llm():
-    return ChatMistralAI(
-        model="mistral-small-latest",
-        mistral_api_key=os.getenv("MISTRAL_API_KEY"),
-        temperature=0.3,
+def sanitize_collection_name(chat_id: str) -> str:
+    clean_id = chat_id.replace("-", "_")
+    return f"c_{clean_id}"[:63]
+
+
+def build_isolated_vector_store(chat_id: str, transcript: str) -> Chroma:
+    collection_name = sanitize_collection_name(chat_id)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=80)
+    chunks = splitter.split_text(transcript)
+
+    docs = [
+        Document(page_content=chunk, metadata={"chat_id": chat_id, "chunk_index": i})
+        for i, chunk in enumerate(chunks)
+    ]
+
+    embeddings = get_embeddings()
+    return Chroma.from_documents(
+        documents=docs,
+        embedding=embeddings,
+        collection_name=collection_name,
+        persist_directory=CHROMA_DIR,
     )
 
 
-def format_docs(docs):
-    return "\n\n".join([doc.page_content for doc in docs])
-
-
-def build_rag_chain(transcript: str):
-    vector_store = build_vector_store(transcript)
-    retriever = get_retriever(vector_store, k=4)
-    llm = get_llm()
+def query_isolated_rag(
+    chat_id: str,
+    question: str,
+    video_title: str,
+    language: str = "english",
+    recent_history: list = None
+) -> str:
+    collection_name = sanitize_collection_name(chat_id)
+    vector_store = Chroma(
+        collection_name=collection_name,
+        embedding_function=get_embeddings(),
+        persist_directory=CHROMA_DIR,
+    )
+    retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+    llm = get_llm(temperature=0.2)
 
     prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            """You are NotesGen AI, an expert video learning assistant. Answer the user's question 
-based ONLY on the video transcript context provided below.
-
-If the answer is not found in the context, say: 
-"I could not find this information in the video transcript."
-
-Always be concise, precise, and educational. If the speaker used a specific analogy or example, cite it clearly.
-
-Context from video transcript:
-{context}""",
-        ),
+        ("system", f"You are NotesGen AI tutor for '{video_title}'. Answer ONLY from transcript context."),
         ("human", "{question}"),
     ])
 
-    # Full LCEL RAG pipeline 
-    rag_chain = (
-        {
-            "context": retriever | RunnableLambda(format_docs),
-            "question": RunnablePassthrough()
-        }
+    chain = (
+        {"context": retriever | RunnableLambda(lambda docs: "\n\n".join([d.page_content for d in docs])), "question": RunnablePassthrough()}
         | prompt
         | llm
         | StrOutputParser()
     )
-
-    return rag_chain
-
-
-def load_rag_chain():
-    vector_store = load_vector_store()
-    retriever = get_retriever(vector_store)
-
-    llm = get_llm()
-    prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            """You are NotesGen AI, an expert video learning assistant. Answer the user's question 
-based ONLY on the video transcript context provided below.
-
-If the answer is not found in the context, say: 
-"I could not find this information in the video transcript."
-
-Always be concise, precise, and educational. If the speaker used a specific analogy or example, cite it clearly.
-
-Context from video transcript:
-{context}""",
-        ),
-        ("human", "{question}"),
-    ])
-
-    rag_chain = (
-        {
-            "context": retriever | RunnableLambda(format_docs),
-            "question": RunnablePassthrough(),
-        }
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
-
-    return rag_chain
-
-
-def ask_question(rag_chain, question: str) -> str:
-    print(f"Question : {question}")
-    answer = rag_chain.invoke(question)
-    print(f"Answer : {answer}")
-    return answer
+    return chain.invoke(question)
 ```
 
 ---
@@ -604,13 +473,15 @@ The primary CLI entrypoint of the application:
 
 #### Code:
 ```python
+import uuid
 from dotenv import load_dotenv
+from core.youtube_helper import get_youtube_transcript_with_timestamps
 from core.audio_processor import process_input
 from core.transcriber import transcribe_all
 from core.summarizer import generate_title
 from core.notes_generator import generate_video_notes
-from core.extractor import extract_key_concepts, extract_questions
-from rag.rag_engine import build_rag_chain, ask_question
+from core.guardrail import check_video_educational
+from rag.isolated_engine import build_isolated_vector_store, query_isolated_rag
 
 load_dotenv()
 
@@ -618,30 +489,31 @@ load_dotenv()
 def run_pipeline(source: str, language: str = "hinglish", style: str = "detailed") -> dict:
     print("\n🚀 Starting NotesGen AI...")
 
-    # Process audio chunks
-    chunks = process_input(source)
+    transcript = None
+    if "youtube.com" in source or "youtu.be" in source:
+        transcript = get_youtube_transcript_with_timestamps(source)
 
-    # Transcribe speech
-    transcript = transcribe_all(chunks, language)
+    if not transcript:
+        chunks = process_input(source)
+        transcript = transcribe_all(chunks, language)
+
+    is_educational, guardrail_msg = check_video_educational(transcript, title=source)
+    if not is_educational:
+        print(f"\n🛡️ Guardrail Block: {guardrail_msg}")
+        return None
+
     title = generate_title(transcript)
-
-    # Generate structured study notes
     notes = generate_video_notes(transcript, style=style, language=language)
 
-    # Extract key concepts and study questions
-    key_concepts = extract_key_concepts(transcript)
-    questions = extract_questions(transcript)
-
-    # Build RAG chain
-    rag_chain = build_rag_chain(transcript)
+    chat_id = f"cli_{uuid.uuid4().hex[:8]}"
+    build_isolated_vector_store(chat_id, transcript)
 
     return {
+        "chat_id": chat_id,
         "title": title,
         "transcript": transcript,
         "notes": notes,
-        "key_concepts": key_concepts,
-        "open_questions": questions,
-        "rag_chain": rag_chain,
+        "language": language,
     }
 
 
@@ -695,11 +567,13 @@ The web frontend built with Streamlit:
 import streamlit as st
 import time
 from dotenv import load_dotenv
-from utils.audio_processor import process_input
+from core.audio_processor import process_input
 from core.transcriber import transcribe_all
-from core.summarizer import summarize, generate_title
-from core.extractor import extract_action_items, extract_key_decisions, extract_questions
-from core.rag_engine import build_rag_chain, ask_question
+from core.summarizer import generate_title
+from core.notes_generator import generate_video_notes
+from core.youtube_helper import get_youtube_transcript_with_timestamps, filter_transcript_by_timeline
+from core.guardrail import check_video_educational
+from rag.isolated_engine import build_isolated_vector_store, query_isolated_rag
 
 load_dotenv()
 
@@ -1149,54 +1023,33 @@ else:
 
 ---
 
-### File 9: `test.py`
+### File 9: `tests/test_notes.py`
 
 #### Purpose & Logic:
-A standalone scratch test script to test the complete pipeline on a single YouTube video without running the web interface or interactive CLI loop.
+A standalone verification script to test transcript extraction and note generation directly from the terminal.
 
 #### Code:
 ```python
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()   # MUST be before any core/ imports
 
-from utils.audio_processor import process_input
-from core.transcriber import transcribe_all
-from core.summarizer import summarize, generate_title
-from core.extractor import extract_action_items, extract_key_decisions, extract_questions
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+load_dotenv()
 
-source = "https://www.youtube.com/watch?v=_Q-e_nczWqM&t=223s"
-language = "english"   # "english" -> Whisper, "hinglish" -> Sarvam
+from core.notes_generator import generate_video_notes
+from core.youtube_helper import get_youtube_transcript_with_timestamps
 
-chunks = process_input(source)
+test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
-transcript = transcribe_all(chunks, language=language)
-print("\n" + "=" * 60)
-print("📝 TRANSCRIPT")
-print("=" * 60)
-print(transcript[:500] + "..." if len(transcript) > 500 else transcript)
+print("1. Fetching transcript...")
+transcript = get_youtube_transcript_with_timestamps(test_url)
+if not transcript:
+    transcript = "[00:00] Introduction to Python lists. [01:30] How to append items to a list."
 
-title = generate_title(transcript)
-summary = summarize(transcript)
-
-print("\n" + "=" * 60)
-print(f"📌 TITLE: {title}")
-print("=" * 60)
-print("\n📋 SUMMARY")
-print("-" * 60)
-print(summary)
-
-key_concepts = extract_key_concepts(transcript)
-questions = extract_questions(transcript)
-
-print("\n" + "=" * 60)
-print("💡 KEY CONCEPTS & ANALOGIES")
-print("=" * 60)
-print(key_concepts)
-
-print("\n" + "=" * 60)
-print("❓ STUDY QUESTIONS")
-print("=" * 60)
-print(questions)
+print("2. Generating study notes in Hinglish...")
+notes = generate_video_notes(transcript, style="detailed", language="hinglish")
+print(notes)
 ```
 
 ---

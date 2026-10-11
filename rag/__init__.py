@@ -1,1 +1,6 @@
-from rag.rag_engine import build_rag_chain, load_rag_chain, ask_question
+from rag.embeddings import get_embeddings
+from rag.isolated_engine import (
+    build_isolated_vector_store,
+    load_isolated_vector_store,
+    query_isolated_rag,
+)

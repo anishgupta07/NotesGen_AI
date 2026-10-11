@@ -1,4 +1,7 @@
 # ── NotesGen AI ── requirements.txt ──────────────────────────────────────────
+# IMPORTANT: Heavy ML packages (torch, openai-whisper, sentence-transformers,
+# chromadb) have been intentionally removed to keep startup RAM under 512 MB
+# (Render free-tier limit). Cloud transcription uses Groq Whisper API instead.
 
 # ── YouTube Transcript ────────────────────────────────────────────────────────
 youtube_transcript_api>=0.6.2
@@ -6,15 +9,11 @@ youtube_transcript_api>=0.6.2
 # ── Audio / Video Acquisition & Conversion ───────────────────────────────────
 yt-dlp>=2024.4.9                  # Download audio from YouTube URLs
 pydub>=0.25.1                     # Audio file manipulation / format conversion
-audioop-lts>=0.2.0; python_version >= '3.13'  # Required only on Python 3.13+ (built-in on Python 3.11)
 ffmpeg-python>=0.2.0              # FFmpeg bindings
 static-ffmpeg>=2.5                # Provides self-contained FFmpeg & FFprobe binaries
 
-# ── Speech-to-Text (Cloud Groq Whisper + local Whisper fallback) ──────────────
+# ── Speech-to-Text (Cloud Groq Whisper) ──────────────────────────────────────
 groq>=0.9.0                       # Groq Cloud Whisper (whisper-large-v3-turbo) & LLM
-openai-whisper>=20231117          # OpenAI Whisper fallback
-torch>=2.2.0                      # PyTorch backend for Whisper
-torchaudio>=2.2.0                 # Audio utilities for PyTorch
 
 # ── Translation (Hindi → English) ─────────────────────────────────────────────
 deep-translator>=1.11.4           # Translation wrapper (Google backend)
@@ -25,16 +24,10 @@ langchain-core>=0.2.0
 langchain-community>=0.2.0
 langchain-groq>=0.1.0             # Groq provider (Llama-3.3-70b / Qwen)
 langchain-google-genai>=1.0.0     # Google Gemini fallback provider
-langchain-mistralai>=0.1.0        # Mistral API fallback provider
-mistralai>=0.4.0
 
-# ── RAG Pipeline & Vector Store ───────────────────────────────────────────────
-chromadb>=0.5.0                   # Local vector store
-langchain-chroma>=0.1.0           # LangChain Chroma integration
-sentence-transformers>=3.0.0      # HuggingFace embedding models
-langchain-huggingface>=0.0.3      # Embeddings bridge
-huggingface-hub>=0.23.0           # Model downloading from HuggingFace Hub
+# ── RAG Pipeline (lightweight TFIDF — no torch/chromadb needed) ───────────────
 tiktoken>=0.7.0                   # Token counting for text splitting
+scikit-learn>=1.4.0               # TFIDFRetriever dependency
 
 # ── Backend API & Server ──────────────────────────────────────────────────────
 fastapi>=0.110.0

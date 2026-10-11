@@ -15,24 +15,56 @@ def extract_youtube_video_id(url: str) -> str | None:
     return None
 
 
+import os
+from typing import Optional
+
+def get_proxy_config():
+    proxy_url = os.getenv("YOUTUBE_PROXY") or os.getenv("PROXY_URL") or os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+    if proxy_url:
+        try:
+            from youtube_transcript_api.proxies import GenericProxyConfig
+            clean_proxy = proxy_url.strip()
+            if not clean_proxy.startswith("http://") and not clean_proxy.startswith("https://"):
+                clean_proxy = f"http://{clean_proxy}"
+            return GenericProxyConfig(http_url=clean_proxy, https_url=clean_proxy)
+        except Exception as e:
+            print(f"Warning: could not initialize proxy configuration: {e}")
+    return None
+
+
 def get_youtube_transcript_with_timestamps(url: str) -> str | None:
     """Fetch official or auto-generated YouTube subtitles formatted with [MM:SS] timestamps.
-    Returns None if subtitles are unavailable or disabled.
+    Automatically routes through proxy if YOUTUBE_PROXY or HTTP_PROXY is configured.
     """
     video_id = extract_youtube_video_id(url)
     if not video_id:
         return None
 
     try:
-        # Supports both youtube-transcript-api 1.x (fetch) and legacy (<1.0 get_transcript)
-        api = YouTubeTranscriptApi()
-        if hasattr(api, "fetch"):
+        proxy_config = get_proxy_config()
+        api = YouTubeTranscriptApi(proxy_config=proxy_config) if proxy_config else YouTubeTranscriptApi()
+
+        transcript_data = None
+        # 1. Try English and Hindi first
+        try:
             transcript_obj = api.fetch(video_id, languages=['en', 'hi'])
             transcript_data = transcript_obj.to_raw_data()
-        elif hasattr(YouTubeTranscriptApi, "get_transcript"):
-            transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi'])
-        else:
-            raise AttributeError("No supported transcript fetch method found on YouTubeTranscriptApi")
+        except Exception:
+            # 2. Fallback: fetch whatever transcript/captions are available
+            try:
+                transcript_obj = api.fetch(video_id)
+                transcript_data = transcript_obj.to_raw_data()
+            except Exception:
+                pass
+
+        if not transcript_data and hasattr(YouTubeTranscriptApi, "get_transcript"):
+            try:
+                transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi'])
+            except Exception:
+                transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
+
+        if not transcript_data:
+            return None
 
         formatted_transcript = []
         for entry in transcript_data:

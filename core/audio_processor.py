@@ -40,6 +40,13 @@ def download_youtube_audio(url: str) -> str:
         {"youtube": {"player_client": ["ios", "web"]}},
     ]
 
+    proxy_url = os.getenv("YOUTUBE_PROXY") or os.getenv("PROXY_URL") or os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+    clean_proxy = None
+    if proxy_url:
+        clean_proxy = proxy_url.strip()
+        if not clean_proxy.startswith("http://") and not clean_proxy.startswith("https://"):
+            clean_proxy = f"http://{clean_proxy}"
+
     last_error = None
     for extractor_args in client_strategies:
         ydl_opts = {
@@ -57,6 +64,8 @@ def download_youtube_audio(url: str) -> str:
             "quiet": True,
             "no_warnings": True,
         }
+        if clean_proxy:
+            ydl_opts["proxy"] = clean_proxy
         if extractor_args:
             ydl_opts["extractor_args"] = extractor_args
 

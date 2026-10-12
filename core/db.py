@@ -5,7 +5,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-DB_DIR = Path(__file__).resolve().parent.parent / "data"
+DATA_DIR_ENV = os.getenv("DATA_DIR")
+if DATA_DIR_ENV:
+    DB_DIR = Path(DATA_DIR_ENV)
+else:
+    DB_DIR = Path(__file__).resolve().parent.parent / "data"
+
 DB_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DB_DIR / "notesgen.db"
 

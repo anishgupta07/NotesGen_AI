@@ -11,7 +11,12 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from core.llm import get_llm
 from core.db import get_chat
 
-CHROMA_DIR = Path(__file__).resolve().parent.parent / "data" / "vector_db"
+DATA_DIR_ENV = os.getenv("DATA_DIR")
+if DATA_DIR_ENV:
+    CHROMA_DIR = Path(DATA_DIR_ENV) / "vector_db"
+else:
+    CHROMA_DIR = Path(__file__).resolve().parent.parent / "data" / "vector_db"
+
 CHROMA_DIR.mkdir(parents=True, exist_ok=True)
 
 

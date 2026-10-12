@@ -35,10 +35,9 @@ COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 # Create runtime directories for SQLite and RAG chunk store
 RUN mkdir -p data/downloads data/vector_db
 
-# Hugging Face Spaces routes external traffic to port 7860.
-# PORT env var can be overridden at runtime for other platforms (Render, Railway, local).
-ENV PORT=7860
-EXPOSE 7860
+# Railway / cloud environments dynamically supply $PORT at runtime
+ENV PORT=8000
+EXPOSE 8000
 
 # Start unified FastAPI server
-CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-7860}"]
+CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000}"]

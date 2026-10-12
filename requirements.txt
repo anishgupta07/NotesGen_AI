@@ -32,6 +32,7 @@ scikit-learn>=1.4.0               # TFIDFRetriever dependency
 # ── Backend API & Server ──────────────────────────────────────────────────────
 fastapi>=0.110.0
 uvicorn>=0.28.0
+python-multipart>=0.0.9
 
 # ── Document & Export Utilities ───────────────────────────────────────────────
 reportlab>=4.2.0                  # PDF generation

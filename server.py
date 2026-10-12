@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Depends, Header, status
+from fastapi import FastAPI, HTTPException, Depends, Header, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
@@ -30,7 +30,7 @@ from core.youtube_helper import (
     get_youtube_transcript_with_timestamps,
     filter_transcript_by_timeline,
 )
-from core.audio_processor import process_input, cleanup_audio_files, cleanup_downloads_dir
+from core.audio_processor import process_input, cleanup_audio_files, cleanup_downloads_dir, DOWNLOAD_DIR
 from core.transcriber import transcribe_all
 from core.summarizer import generate_title
 from core.notes_generator import generate_video_notes
@@ -315,6 +315,79 @@ def api_generate_notes(req: GenerateNotesRequest, current_user: dict = Depends(g
     # 8. Build isolated vector store for RAG chat
     try:
         build_isolated_vector_store(chat["id"], transcript_to_process)
+    except Exception as e:
+        print(f"Warning: vector store build error: {e}")
+
+    return chat
+
+
+@app.post("/api/generate-from-file")
+async def api_generate_from_file(
+    file: UploadFile = File(...),
+    language: str = Form("hinglish"),
+    style: str = Form("detailed"),
+    current_user: dict = Depends(get_current_user),
+):
+    """Direct audio/video file upload (MP3, WAV, M4A, MP4) fallback:
+    Allows generating notes directly from local recordings or downloaded audio without depending on YouTube."""
+    user_groq_key = current_user.get("groq_api_key") or os.getenv("GROQ_API_KEY")
+    if not user_groq_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Groq API Key is required. Please set your personal free Groq API key in the top settings modal.",
+        )
+
+    file_ext = os.path.splitext(file.filename or "")[1] or ".mp3"
+    temp_upload_path = os.path.join(DOWNLOAD_DIR, f"upload_{uuid.uuid4().hex[:8]}{file_ext}")
+
+    try:
+        contents = await file.read()
+        with open(temp_upload_path, "wb") as f:
+            f.write(contents)
+
+        chunks = process_input(temp_upload_path)
+        transcript = transcribe_all(chunks, language, auto_cleanup=True, groq_api_key=user_groq_key)
+    except Exception as e:
+        cleanup_downloads_dir()
+        raise HTTPException(status_code=400, detail=f"Failed to process uploaded file: {str(e)}")
+    finally:
+        if os.path.exists(temp_upload_path):
+            try:
+                os.remove(temp_upload_path)
+            except Exception:
+                pass
+        cleanup_downloads_dir()
+
+    if not transcript or not transcript.strip():
+        raise HTTPException(status_code=400, detail="Could not extract transcript from uploaded audio.")
+
+    # Educational guardrail
+    is_educational, guardrail_msg = check_video_educational(transcript, title=file.filename or "Uploaded Audio", groq_api_key=user_groq_key)
+    if not is_educational:
+        raise HTTPException(status_code=400, detail=guardrail_msg)
+
+    try:
+        title = generate_title(transcript, groq_api_key=user_groq_key)
+    except Exception:
+        title = file.filename or "Uploaded Lecture Notes"
+
+    try:
+        notes = generate_video_notes(transcript, style=style, language=language, groq_api_key=user_groq_key)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating notes: {str(e)}")
+
+    chat = create_chat(
+        user_id=current_user["id"],
+        title=title,
+        video_url=file.filename or "Local File Upload",
+        language=language,
+        note_style=style,
+        notes=notes,
+        transcript=transcript,
+    )
+
+    try:
+        build_isolated_vector_store(chat["id"], transcript)
     except Exception as e:
         print(f"Warning: vector store build error: {e}")
 

@@ -138,6 +138,41 @@ export async function requestGenerateNotes(payload: GenerateNotesRequest): Promi
   return res.json();
 }
 
+export async function requestGenerateFromFile(
+  file: File,
+  language: 'hinglish' | 'english' = 'hinglish',
+  style: 'detailed' | 'cheatsheet' = 'detailed'
+): Promise<ChatDetail> {
+  const token = localStorage.getItem('notesgen_token');
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('language', language);
+  formData.append('style', style);
+
+  const res = await fetch(`${API_BASE}/generate-from-file`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    let errorDetail = '';
+    try {
+      const errorData = await res.json();
+      errorDetail = errorData.detail || '';
+    } catch {
+      const text = await res.text().catch(() => '');
+      errorDetail = text.slice(0, 150) || '';
+    }
+    const message = errorDetail || `Server error (${res.status}): Failed to generate notes from file`;
+    throw new Error(message);
+  }
+  return res.json();
+}
+
 export async function sendChatMessage(
   chatId: string,
   question: string

@@ -10,6 +10,7 @@ import {
   fetchChats,
   fetchChatById,
   requestGenerateNotes,
+  requestGenerateFromFile,
   sendChatMessage,
   deleteChatSession,
   fetchCurrentUser,
@@ -188,6 +189,48 @@ export const App: React.FC = () => {
       setActiveChat(result);
     } catch (err: any) {
       setErrorMessage(err.message || 'Error generating notes. Please check the URL or try again.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Generate new notes from direct Audio / Video file upload
+  const handleGenerateFromFile = async (
+    file: File,
+    language: 'hinglish' | 'english',
+    style: 'detailed' | 'cheatsheet'
+  ) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    if (!currentUser.has_groq_key) {
+      setIsKeyModalOpen(true);
+      setErrorMessage('Please configure your free Groq API key in the settings modal to generate notes.');
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+      setErrorMessage(null);
+      const result = await requestGenerateFromFile(file, language, style);
+
+      setChats((prev) => [
+        {
+          id: result.id,
+          user_id: result.user_id,
+          title: result.title,
+          video_url: result.video_url,
+          language: result.language,
+          note_style: result.note_style,
+          created_at: result.created_at,
+        },
+        ...prev.filter((c) => c.id !== result.id),
+      ]);
+      setActiveChatId(result.id);
+      setActiveChat(result);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error generating notes from file.');
     } finally {
       setIsGenerating(false);
     }
@@ -388,7 +431,11 @@ export const App: React.FC = () => {
           ) : (
             /* Home / Hero View */
             <div className="h-full overflow-y-auto">
-              <HeroInput onGenerate={handleGenerateNotes} isLoading={isGenerating} />
+              <HeroInput
+                onGenerate={handleGenerateNotes}
+                onGenerateFile={handleGenerateFromFile}
+                isLoading={isGenerating}
+              />
             </div>
           )}
         </div>

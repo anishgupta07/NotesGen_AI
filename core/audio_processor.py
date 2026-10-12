@@ -48,11 +48,12 @@ def download_youtube_audio(url: str) -> str:
     ffmpeg_exe = shutil.which("ffmpeg")
     ffmpeg_dir = os.path.dirname(ffmpeg_exe) if ffmpeg_exe else None
 
-    # Client strategy order (cloud-IP optimised):
+    # Client strategy order:
+    # Android client does not trigger web bot sign-in walls on cloud IPs.
     client_strategies = [
-        None,                                                        # Default visionos/web client
-        {"youtube": {"player_client": ["android", "ios", "web"]}},  # Combined cascade
+        {"youtube": {"player_client": ["android", "ios", "web"]}},  # Combined cascade (bypasses bot wall)
         {"youtube": {"player_client": ["android"]}},                 # Android only
+        None,                                                        # Default client
         {"youtube": {"player_client": ["ios"]}},                     # iOS only
     ]
 
@@ -66,7 +67,7 @@ def download_youtube_audio(url: str) -> str:
     last_error = None
     proxy_options = [clean_proxy, None] if clean_proxy else [None]
 
-    # Cookie support
+    # Cookie support: robustly handle newlines, tabs, and base64 from cloud environment variables
     cookie_file_path = None
     cookies_env = os.getenv("YOUTUBE_COOKIES")
     local_cookie_file = Path(__file__).resolve().parent.parent / "cookies.txt"
@@ -78,9 +79,23 @@ def download_youtube_audio(url: str) -> str:
         cookie_file_path = str(data_cookie_file)
     elif cookies_env:
         try:
+            cookie_text = cookies_env.strip()
+            # If env var has escaped newlines or tabs from UI copy-paste, unescape them
+            if "\\n" in cookie_text:
+                cookie_text = cookie_text.replace("\\r\\n", "\n").replace("\\n", "\n")
+            if "\\t" in cookie_text:
+                cookie_text = cookie_text.replace("\\t", "\t")
+            try:
+                import base64
+                decoded = base64.b64decode(cookie_text).decode("utf-8")
+                if "# Netscape" in decoded or "\t" in decoded:
+                    cookie_text = decoded
+            except Exception:
+                pass
+
             temp_cookie_file = os.path.join(DOWNLOAD_DIR, "temp_cookies.txt")
             with open(temp_cookie_file, "w", encoding="utf-8") as f:
-                f.write(cookies_env.strip())
+                f.write(cookie_text)
             cookie_file_path = temp_cookie_file
         except Exception as e:
             print(f"Warning: could not write cookies from env: {e}")

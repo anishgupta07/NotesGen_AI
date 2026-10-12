@@ -5,8 +5,8 @@ from pathlib import Path
 import static_ffmpeg
 static_ffmpeg.add_paths()
 
+import subprocess
 import yt_dlp
-from pydub import AudioSegment
 from core.youtube_helper import extract_youtube_video_id
 
 DOWNLOAD_DIR = str(Path(__file__).resolve().parent.parent / "data" / "downloads")
@@ -136,37 +136,71 @@ def download_youtube_audio(url: str) -> str:
 
 
 def convert_to_mp3(input_path: str) -> str:
-    """Convert any local audio/video file to compressed MP3 format using pydub."""
+    """Convert any local audio/video file to compressed MP3 format using FFmpeg (zero Python RAM)."""
     file_id = f"local_{uuid.uuid4().hex[:8]}"
     output_path = os.path.join(DOWNLOAD_DIR, f"{file_id}.mp3")
-    audio = AudioSegment.from_file(input_path)
-    audio = audio.set_channels(1).set_frame_rate(16000)
-    audio.export(output_path, format="mp3", bitrate="64k")
+    ffmpeg_exe = shutil.which("ffmpeg") or "ffmpeg"
+    cmd = [
+        ffmpeg_exe, "-y",
+        "-i", input_path,
+        "-vn",
+        "-ar", "16000",
+        "-ac", "1",
+        "-b:a", "64k",
+        output_path
+    ]
+    import subprocess
+    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     return output_path
 
 
-def chunk_audio(audio_path: str, chunk_minutes: int = 10) -> list:
-    """Splits audio into compressed MP3 chunks of `chunk_minutes`. Immediately removes original audio_path to save disk space."""
-    audio = AudioSegment.from_file(audio_path)
-    chunk_ms = chunk_minutes * 60 * 1000
+def chunk_audio(audio_path: str, max_chunk_mb: int = 22) -> list:
+    """Zero-RAM audio handler:
+    1. If MP3 is <= 22MB, returns [audio_path] directly.
+       Zero RAM, zero extra disk writes, direct upload to Groq Whisper.
+    2. If > 22MB, streams directly via FFmpeg without loading audio into Python memory.
+    """
+    if not os.path.exists(audio_path):
+        return []
 
-    chunks = []
+    file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
+    # Most YouTube videos up to 45 mins at 64k are < 22MB, so no chunking is needed at all!
+    if file_size_mb <= max_chunk_mb:
+        print(f"Audio file is {file_size_mb:.2f} MB (within 24MB Groq limit) — processing directly without chunking.")
+        return [audio_path]
+
+    print(f"Audio file is {file_size_mb:.2f} MB (>22MB limit) — segmenting via streaming FFmpeg...")
+    ffmpeg_exe = shutil.which("ffmpeg") or "ffmpeg"
     base_name = os.path.splitext(audio_path)[0]
+    output_pattern = f"{base_name}_part_%03d.mp3"
 
-    for i, start in enumerate(range(0, len(audio), chunk_ms)):
-        chunk = audio[start: start + chunk_ms]
-        chunk_path = f"{base_name}_chunk_{i}.mp3"
-        chunk.export(chunk_path, format="mp3", bitrate="64k")
-        chunks.append(chunk_path)
+    import subprocess
+    cmd = [
+        ffmpeg_exe, "-y",
+        "-i", audio_path,
+        "-f", "segment",
+        "-segment_time", "600",
+        "-c", "copy",
+        output_pattern
+    ]
+    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-    # Immediately delete the parent audio file to save disk space
-    if os.path.exists(audio_path):
+    chunk_dir = os.path.dirname(audio_path)
+    prefix = os.path.basename(base_name) + "_part_"
+    chunks = sorted([
+        os.path.join(chunk_dir, f)
+        for f in os.listdir(chunk_dir)
+        if f.startswith(prefix) and f.endswith(".mp3")
+    ])
+
+    if chunks:
         try:
             os.remove(audio_path)
-        except Exception as e:
-            print(f"Warning: could not delete parent audio {audio_path}: {e}")
+        except Exception:
+            pass
+        return chunks
 
-    return chunks
+    return [audio_path]
 
 
 def cleanup_audio_files(file_paths: list[str]) -> None:

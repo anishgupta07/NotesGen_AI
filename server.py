@@ -30,7 +30,7 @@ from core.youtube_helper import (
     get_youtube_transcript_with_timestamps,
     filter_transcript_by_timeline,
 )
-from core.audio_processor import process_input, cleanup_audio_files
+from core.audio_processor import process_input, cleanup_audio_files, cleanup_downloads_dir
 from core.transcriber import transcribe_all
 from core.summarizer import generate_title
 from core.notes_generator import generate_video_notes
@@ -54,6 +54,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Purge any stale download files on startup to ensure max free disk space
+cleanup_downloads_dir()
 
 
 # ─── Pydantic Schemas ───────────────────────────────────────────────────────────
@@ -230,9 +233,11 @@ def api_generate_notes(req: GenerateNotesRequest, current_user: dict = Depends(g
             chunks = process_input(url)
             transcript = transcribe_all(chunks, req.language, auto_cleanup=True, groq_api_key=user_groq_key)
         except ValueError as e:
+            cleanup_downloads_dir()
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             cleanup_audio_files(chunks)
+            cleanup_downloads_dir()
             err_str = str(e)
             if "player response" in err_str.lower() or "bot" in err_str.lower() or "confirm you" in err_str.lower():
                 detail_msg = (
@@ -246,6 +251,8 @@ def api_generate_notes(req: GenerateNotesRequest, current_user: dict = Depends(g
                 status_code=400,
                 detail=detail_msg
             )
+        finally:
+            cleanup_downloads_dir()
 
     if not transcript:
         raise HTTPException(

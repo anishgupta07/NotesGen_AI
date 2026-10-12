@@ -13,10 +13,27 @@ DOWNLOAD_DIR = str(Path(__file__).resolve().parent.parent / "data" / "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
+def cleanup_downloads_dir() -> None:
+    """Remove any lingering temporary audio or download files in data/downloads."""
+    if os.path.exists(DOWNLOAD_DIR):
+        for item in os.listdir(DOWNLOAD_DIR):
+            item_path = os.path.join(DOWNLOAD_DIR, item)
+            # Never delete cookie files
+            if "cookie" in item.lower():
+                continue
+            if os.path.isfile(item_path):
+                try:
+                    os.remove(item_path)
+                except Exception:
+                    pass
+
+
 def download_youtube_audio(url: str) -> str:
-    """Download audio from a YouTube video URL, converting to 16kHz mono WAV format."""
+    """Download audio from a YouTube video URL, converting to lightweight 64kbps MP3 format
+    to prevent cloud disk space exhaustion (Errno 28: No space left on device)."""
+    cleanup_downloads_dir()
+
     video_id = extract_youtube_video_id(url)
-    
     if not video_id and "list=" in url and "v=" not in url:
         raise ValueError(
             "The provided link appears to be a full playlist. "
@@ -26,16 +43,14 @@ def download_youtube_audio(url: str) -> str:
     clean_url = f"https://www.youtube.com/watch?v={video_id}" if video_id else url
     target_id = video_id or f"audio_{uuid.uuid4().hex[:8]}"
     out_template = os.path.join(DOWNLOAD_DIR, f"{target_id}.%(ext)s")
-    expected_wav = os.path.join(DOWNLOAD_DIR, f"{target_id}.wav")
+    expected_mp3 = os.path.join(DOWNLOAD_DIR, f"{target_id}.mp3")
 
     ffmpeg_exe = shutil.which("ffmpeg")
     ffmpeg_dir = os.path.dirname(ffmpeg_exe) if ffmpeg_exe else None
 
     # Client strategy order (cloud-IP optimised):
-    # Default yt-dlp client provides real audio-only format URLs (140/139/251) on datacenter IPs.
-    # Android/iOS clients return SABR-only formats on cloud IPs which have no downloadable URL.
     client_strategies = [
-        None,                                                        # Default visionos/web client → formats 140/139/251 have real URLs
+        None,                                                        # Default visionos/web client
         {"youtube": {"player_client": ["android", "ios", "web"]}},  # Combined cascade
         {"youtube": {"player_client": ["android"]}},                 # Android only
         {"youtube": {"player_client": ["ios"]}},                     # iOS only
@@ -49,10 +64,9 @@ def download_youtube_audio(url: str) -> str:
             clean_proxy = f"http://{clean_proxy}"
 
     last_error = None
-    # If proxy is provided, try with proxy first; if it fails, try without proxy as fallback
     proxy_options = [clean_proxy, None] if clean_proxy else [None]
 
-    # Cookie support: check for cookies.txt file or YOUTUBE_COOKIES environment variable
+    # Cookie support
     cookie_file_path = None
     cookies_env = os.getenv("YOUTUBE_COOKIES")
     local_cookie_file = Path(__file__).resolve().parent.parent / "cookies.txt"
@@ -74,6 +88,7 @@ def download_youtube_audio(url: str) -> str:
     for current_proxy in proxy_options:
         for extractor_args in client_strategies:
             ydl_opts = {
+                # Format ba/b/18 with lightweight 64kbps MP3 postprocessor saves 95% disk space
                 "format": "ba/b/18/140/139/251/250/249/bestaudio/best",
                 "outtmpl": out_template,
                 "noplaylist": True,
@@ -84,8 +99,8 @@ def download_youtube_audio(url: str) -> str:
                 "postprocessors": [
                     {
                         "key": "FFmpegExtractAudio",
-                        "preferredcodec": "wav",
-                        "preferredquality": "192",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "64",
                     }
                 ],
                 "quiet": True,
@@ -101,56 +116,55 @@ def download_youtube_audio(url: str) -> str:
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.extract_info(clean_url, download=True)
-                if os.path.exists(expected_wav):
-                    return expected_wav
-                # Fallback check for any generated wav matching target_id
+                if os.path.exists(expected_mp3):
+                    return expected_mp3
+                # Fallback check for any generated audio matching target_id
                 for f in os.listdir(DOWNLOAD_DIR):
-                    if f.startswith(target_id) and f.endswith(".wav"):
+                    if f.startswith(target_id) and f.endswith((".mp3", ".m4a", ".wav", ".webm")):
                         return os.path.join(DOWNLOAD_DIR, f)
             except Exception as e:
                 last_error = e
                 continue
 
-    if not os.path.exists(expected_wav):
-        # Final fallback check for any generated wav matching target_id
+    if not os.path.exists(expected_mp3):
         for f in os.listdir(DOWNLOAD_DIR):
-            if f.startswith(target_id) and f.endswith(".wav"):
+            if f.startswith(target_id) and f.endswith((".mp3", ".m4a", ".wav", ".webm")):
                 return os.path.join(DOWNLOAD_DIR, f)
         raise RuntimeError(f"Could not download audio from YouTube video: {last_error or 'Unknown error'}")
 
-    return expected_wav
+    return expected_mp3
 
 
-def convert_to_wav(input_path: str) -> str:
-    """Convert any local audio/video file to WAV format using pydub."""
+def convert_to_mp3(input_path: str) -> str:
+    """Convert any local audio/video file to compressed MP3 format using pydub."""
     file_id = f"local_{uuid.uuid4().hex[:8]}"
-    output_path = os.path.join(DOWNLOAD_DIR, f"{file_id}.wav")
+    output_path = os.path.join(DOWNLOAD_DIR, f"{file_id}.mp3")
     audio = AudioSegment.from_file(input_path)
     audio = audio.set_channels(1).set_frame_rate(16000)
-    audio.export(output_path, format="wav")
+    audio.export(output_path, format="mp3", bitrate="64k")
     return output_path
 
 
-def chunk_audio(wav_path: str, chunk_minutes: int = 10) -> list:
-    """Splits WAV audio into chunks of `chunk_minutes`. Immediately removes original wav_path to save space."""
-    audio = AudioSegment.from_wav(wav_path)
+def chunk_audio(audio_path: str, chunk_minutes: int = 10) -> list:
+    """Splits audio into compressed MP3 chunks of `chunk_minutes`. Immediately removes original audio_path to save disk space."""
+    audio = AudioSegment.from_file(audio_path)
     chunk_ms = chunk_minutes * 60 * 1000
 
     chunks = []
-    base_name = os.path.splitext(wav_path)[0]
+    base_name = os.path.splitext(audio_path)[0]
 
     for i, start in enumerate(range(0, len(audio), chunk_ms)):
         chunk = audio[start: start + chunk_ms]
-        chunk_path = f"{base_name}_chunk_{i}.wav"
-        chunk.export(chunk_path, format="wav")
+        chunk_path = f"{base_name}_chunk_{i}.mp3"
+        chunk.export(chunk_path, format="mp3", bitrate="64k")
         chunks.append(chunk_path)
 
-    # Immediately delete the parent WAV file to save disk space
-    if os.path.exists(wav_path):
+    # Immediately delete the parent audio file to save disk space
+    if os.path.exists(audio_path):
         try:
-            os.remove(wav_path)
+            os.remove(audio_path)
         except Exception as e:
-            print(f"Warning: could not delete parent wav {wav_path}: {e}")
+            print(f"Warning: could not delete parent audio {audio_path}: {e}")
 
     return chunks
 
@@ -165,28 +179,18 @@ def cleanup_audio_files(file_paths: list[str]) -> None:
                 print(f"Warning: could not delete {path}: {e}")
 
 
-def cleanup_downloads_dir() -> None:
-    """Remove any lingering temporary audio or download files in data/downloads."""
-    if os.path.exists(DOWNLOAD_DIR):
-        for item in os.listdir(DOWNLOAD_DIR):
-            item_path = os.path.join(DOWNLOAD_DIR, item)
-            if os.path.isfile(item_path):
-                try:
-                    os.remove(item_path)
-                except Exception:
-                    pass
-
-
 def process_input(source: str) -> list:
-    """Process a YouTube URL or local file into manageable 10-minute audio chunks."""
-    if source.startswith("http://") or source.startswith("https://"):
-        print("Detected YouTube URL. Downloading audio...")
-        wav_path = download_youtube_audio(source)
-    else:
-        print("Detected local file. Converting to WAV...")
-        wav_path = convert_to_wav(source)
+    """Process a YouTube URL or local file into manageable 10-minute compressed MP3 audio chunks."""
+    cleanup_downloads_dir()
 
-    print("Chunking audio...")
-    chunks = chunk_audio(wav_path)
+    if source.startswith("http://") or source.startswith("https://"):
+        print("Detected YouTube URL. Downloading audio as compressed MP3...")
+        audio_path = download_youtube_audio(source)
+    else:
+        print("Detected local file. Converting to MP3...")
+        audio_path = convert_to_mp3(source)
+
+    print("Chunking audio into 64kbps MP3s...")
+    chunks = chunk_audio(audio_path)
     print(f"Audio ready — {len(chunks)} chunk(s) created.")
     return chunks

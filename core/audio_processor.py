@@ -51,13 +51,32 @@ def download_youtube_audio(url: str) -> str:
     # If proxy is provided, try with proxy first; if it fails, try without proxy as fallback
     proxy_options = [clean_proxy, None] if clean_proxy else [None]
 
+    # Cookie support: check for cookies.txt file or YOUTUBE_COOKIES environment variable
+    cookie_file_path = None
+    cookies_env = os.getenv("YOUTUBE_COOKIES")
+    local_cookie_file = Path(__file__).resolve().parent.parent / "cookies.txt"
+    data_cookie_file = Path(DOWNLOAD_DIR).parent / "cookies.txt"
+
+    if local_cookie_file.exists():
+        cookie_file_path = str(local_cookie_file)
+    elif data_cookie_file.exists():
+        cookie_file_path = str(data_cookie_file)
+    elif cookies_env:
+        try:
+            temp_cookie_file = os.path.join(DOWNLOAD_DIR, "temp_cookies.txt")
+            with open(temp_cookie_file, "w", encoding="utf-8") as f:
+                f.write(cookies_env.strip())
+            cookie_file_path = temp_cookie_file
+        except Exception as e:
+            print(f"Warning: could not write cookies from env: {e}")
+
     for current_proxy in proxy_options:
         for extractor_args in client_strategies:
             ydl_opts = {
                 "format": "bestaudio/best",
                 "outtmpl": out_template,
                 "noplaylist": True,
-                "socket_timeout": 10,
+                "socket_timeout": 15,
                 "ffmpeg_location": ffmpeg_dir,
                 "postprocessors": [
                     {
@@ -69,6 +88,8 @@ def download_youtube_audio(url: str) -> str:
                 "quiet": True,
                 "no_warnings": True,
             }
+            if cookie_file_path and os.path.exists(cookie_file_path):
+                ydl_opts["cookiefile"] = cookie_file_path
             if current_proxy:
                 ydl_opts["proxy"] = current_proxy
             if extractor_args:

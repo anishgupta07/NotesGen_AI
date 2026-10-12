@@ -31,16 +31,14 @@ def download_youtube_audio(url: str) -> str:
     ffmpeg_exe = shutil.which("ffmpeg")
     ffmpeg_dir = os.path.dirname(ffmpeg_exe) if ffmpeg_exe else None
 
-    # Resilient multi-client strategy:
-    # 1. Combined android+ios+web cascade (most reliable across all YouTube experiment buckets)
-    # 2. Android client explicitly
-    # 3. Default yt-dlp client cascade
-    # 4. iOS client
+    # Client strategy order (cloud-IP optimised):
+    # Default yt-dlp client provides real audio-only format URLs (140/139/251) on datacenter IPs.
+    # Android/iOS clients return SABR-only formats on cloud IPs which have no downloadable URL.
     client_strategies = [
-        {"youtube": {"player_client": ["android", "ios", "web"]}},
-        {"youtube": {"player_client": ["android"]}},
-        None,
-        {"youtube": {"player_client": ["ios"]}},
+        None,                                                        # Default visionos/web client → formats 140/139/251 have real URLs
+        {"youtube": {"player_client": ["android", "ios", "web"]}},  # Combined cascade
+        {"youtube": {"player_client": ["android"]}},                 # Android only
+        {"youtube": {"player_client": ["ios"]}},                     # iOS only
     ]
 
     proxy_url = os.getenv("YOUTUBE_PROXY") or os.getenv("PROXY_URL") or os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
@@ -76,7 +74,7 @@ def download_youtube_audio(url: str) -> str:
     for current_proxy in proxy_options:
         for extractor_args in client_strategies:
             ydl_opts = {
-                "format": "bestaudio/ba/b/18/best",
+                "format": "140/139/251/250/249/bestaudio/ba/b/18/best",
                 "outtmpl": out_template,
                 "noplaylist": True,
                 "socket_timeout": 20,

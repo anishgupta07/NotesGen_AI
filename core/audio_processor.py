@@ -31,13 +31,16 @@ def download_youtube_audio(url: str) -> str:
     ffmpeg_exe = shutil.which("ffmpeg")
     ffmpeg_dir = os.path.dirname(ffmpeg_exe) if ffmpeg_exe else None
 
-    # Resilient multi-client strategy: try android client first (bypasses EJS cipher challenges), then default, then web/mweb
+    # Resilient multi-client strategy:
+    # 1. Combined android+ios+web cascade (most reliable across all YouTube experiment buckets)
+    # 2. Android client explicitly
+    # 3. Default yt-dlp client cascade
+    # 4. iOS client
     client_strategies = [
-        {"youtube": {"player_client": ["android"]}},  # Android client bypasses EJS cipher and provides direct audio
-        None,                                          # Default smart multi-client extraction (visionos/web)
-        {"youtube": {"player_client": ["web"]}},
-        {"youtube": {"player_client": ["mweb"]}},
-        {"youtube": {"player_client": ["ios", "web"]}},
+        {"youtube": {"player_client": ["android", "ios", "web"]}},
+        {"youtube": {"player_client": ["android"]}},
+        None,
+        {"youtube": {"player_client": ["ios"]}},
     ]
 
     proxy_url = os.getenv("YOUTUBE_PROXY") or os.getenv("PROXY_URL") or os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
@@ -73,10 +76,10 @@ def download_youtube_audio(url: str) -> str:
     for current_proxy in proxy_options:
         for extractor_args in client_strategies:
             ydl_opts = {
-                "format": "bestaudio/best",
+                "format": "bestaudio/ba/b/18/best",
                 "outtmpl": out_template,
                 "noplaylist": True,
-                "socket_timeout": 15,
+                "socket_timeout": 20,
                 "ffmpeg_location": ffmpeg_dir,
                 "postprocessors": [
                     {

@@ -11,20 +11,24 @@ RUN npm run build
 # ── Stage 2: Python Backend & Unified Server ──────────────────────────────────
 FROM python:3.11-slim
 
-# Install system dependencies (ffmpeg for audio processing, nodejs for yt-dlp JS runtime)
+# Install system dependencies (ffmpeg for audio processing, nodejs and deno for yt-dlp JS challenge runtime)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     nodejs \
     git \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy Deno binary directly from official Deno image (yt-dlp's native JS engine for YouTube challenges)
+COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
 
 WORKDIR /app
 
 # Install Python requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -U yt-dlp
+    pip install --no-cache-dir -U "yt-dlp[default]"
 
 # Copy backend application code
 COPY . .

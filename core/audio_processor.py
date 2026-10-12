@@ -74,11 +74,13 @@ def download_youtube_audio(url: str) -> str:
     for current_proxy in proxy_options:
         for extractor_args in client_strategies:
             ydl_opts = {
-                "format": "140/139/251/250/249/bestaudio/ba/b/18/best",
+                "format": "ba/b/18/140/139/251/250/249/bestaudio/best",
                 "outtmpl": out_template,
                 "noplaylist": True,
-                "socket_timeout": 20,
+                "socket_timeout": 25,
                 "ffmpeg_location": ffmpeg_dir,
+                "js_runtimes": {"deno": {}, "node": {}},
+                "remote_components": ["ejs:github"],
                 "postprocessors": [
                     {
                         "key": "FFmpegExtractAudio",

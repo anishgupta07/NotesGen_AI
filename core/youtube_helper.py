@@ -33,26 +33,55 @@ def get_proxy_config():
 
 
 def fetch_raw_transcript(video_id: str, proxy_config=None):
-    """Fetch transcript with language fallback."""
+    """Fetch transcript with thorough language and auto-generated fallback."""
     api = YouTubeTranscriptApi(proxy_config=proxy_config) if proxy_config else YouTubeTranscriptApi()
-    # 1. Try English and Hindi
+    
+    # 1. Try explicit fetch for common languages
+    for langs in (['en', 'en-US', 'en-GB', 'hi', 'hi-Latn'], ['en'], None):
+        try:
+            if langs:
+                obj = api.fetch(video_id, languages=langs)
+            else:
+                obj = api.fetch(video_id)
+            if obj:
+                return obj.to_raw_data()
+        except Exception:
+            pass
+
+    # 2. Try listing all available transcripts (manually created first, then auto-generated)
     try:
-        obj = api.fetch(video_id, languages=['en', 'hi'])
-        return obj.to_raw_data()
+        transcript_list = api.list(video_id)
+        # Check for English or Hindi manually created
+        for lang in ['en', 'hi']:
+            try:
+                t = transcript_list.find_manually_created_transcript([lang])
+                if t:
+                    return t.fetch().to_raw_data()
+            except Exception:
+                pass
+        # Check for any generated transcript
+        for lang in ['en', 'hi']:
+            try:
+                t = transcript_list.find_generated_transcript([lang])
+                if t:
+                    return t.fetch().to_raw_data()
+            except Exception:
+                pass
+        # Fallback to the first available transcript in any language
+        for t in transcript_list:
+            try:
+                return t.fetch().to_raw_data()
+            except Exception:
+                pass
     except Exception:
         pass
-    # 2. Try any language
-    try:
-        obj = api.fetch(video_id)
-        return obj.to_raw_data()
-    except Exception:
-        pass
+
     # 3. Legacy method fallback
     if hasattr(YouTubeTranscriptApi, "get_transcript"):
-        try:
-            return YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi'])
-        except Exception:
+        for langs in (['en', 'hi'], None):
             try:
+                if langs:
+                    return YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
                 return YouTubeTranscriptApi.get_transcript(video_id)
             except Exception:
                 pass

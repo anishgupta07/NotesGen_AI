@@ -46,8 +46,8 @@ Output MUST be strictly valid JSON:
     human_content = f"Video Title: {title or 'Unknown'}\n\nTranscript Excerpt:\n{excerpt}"
 
     try:
-        # Use Qwen or 20b model with max_tokens=150 to preserve 120b token quota
-        llm = get_llm(temperature=0.0, model="qwen/qwen3.8-27b", max_tokens=150, api_key=groq_api_key)
+        # Use fast llama-3.1-8b-instant with max_tokens=150 to preserve primary model quota
+        llm = get_llm(temperature=0.0, model="llama-3.1-8b-instant", max_tokens=150, api_key=groq_api_key)
         response = llm.invoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_content)

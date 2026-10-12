@@ -17,45 +17,67 @@ def load_local_model():
 
 
 def transcribe_chunk_with_groq(chunk_path: str, api_key: str, language: str = "english") -> Optional[str]:
-    """Transcribe audio chunk using Groq's high-speed cloud Whisper API (whisper-large-v3-turbo)."""
-    try:
-        from groq import Groq
-        client = Groq(api_key=api_key)
-        is_hindi = language.lower() in ["hinglish", "hindi"]
+    """Transcribe audio chunk using Groq's high-speed cloud Whisper API."""
+    from groq import Groq
+    client = Groq(api_key=api_key)
+    is_hindi = language.lower() in ["hinglish", "hindi"]
 
-        with open(chunk_path, "rb") as f:
-            file_tuple = (os.path.basename(chunk_path), f.read())
+    with open(chunk_path, "rb") as f:
+        file_tuple = (os.path.basename(chunk_path), f.read())
 
-        # If audio is Hindi/Hinglish, translations endpoint converts speech to English text automatically
-        if is_hindi:
+    # For Hindi/Hinglish speech: Groq translations endpoint ONLY supports whisper-large-v3 (not turbo)
+    if is_hindi:
+        try:
             res = client.audio.translations.create(
                 file=file_tuple,
-                model="whisper-large-v3-turbo",
+                model="whisper-large-v3",
                 response_format="text",
             )
-        else:
-            res = client.audio.transcriptions.create(
-                file=file_tuple,
-                model="whisper-large-v3-turbo",
-                response_format="text",
-                language="en",
-            )
+            if isinstance(res, str):
+                return res
+            return getattr(res, "text", str(res))
+        except Exception as e:
+            print(f"Groq translations notice ({e}). Falling back to multilingual transcription...")
 
+    # For English or fallback: use whisper-large-v3-turbo with fallback to whisper-large-v3
+    try:
+        res = client.audio.transcriptions.create(
+            file=file_tuple,
+            model="whisper-large-v3-turbo",
+            response_format="text",
+        )
         if isinstance(res, str):
             return res
         return getattr(res, "text", str(res))
     except Exception as e:
-        print(f"Groq cloud transcription notice ({e}). Falling back to local Whisper.")
-        return None
+        print(f"Groq turbo transcription notice ({e}). Trying whisper-large-v3...")
+        res = client.audio.transcriptions.create(
+            file=file_tuple,
+            model="whisper-large-v3",
+            response_format="text",
+        )
+        if isinstance(res, str):
+            return res
+        return getattr(res, "text", str(res))
 
 
 def transcribe_chunk(chunk_path: str, language: str = "english", groq_api_key: Optional[str] = None) -> str:
     """Transcribe chunk: prioritizes Groq cloud Whisper, falls back to local Whisper only on local PCs."""
     active_key = groq_api_key or os.getenv("GROQ_API_KEY")
     if active_key:
-        groq_text = transcribe_chunk_with_groq(chunk_path, active_key, language=language)
-        if groq_text:
-            return groq_text
+        try:
+            groq_text = transcribe_chunk_with_groq(chunk_path, active_key, language=language)
+            if groq_text and groq_text.strip():
+                return groq_text.strip()
+        except Exception as e:
+            print(f"Groq transcription error: {e}")
+            is_cloud = bool(
+                os.getenv("RENDER") or
+                os.getenv("RAILWAY_ENVIRONMENT") or
+                os.getenv("SPACE_ID")
+            )
+            if is_cloud:
+                raise RuntimeError(f"Groq cloud transcription error: {str(e)}")
 
     # Cloud environments (Render, Railway, HF Spaces, etc.) have strict RAM limits.
     # Running local PyTorch Whisper triggers OOM → process killed (502 / 503).

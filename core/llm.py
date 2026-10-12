@@ -13,14 +13,14 @@ def get_llm(
     api_key: Optional[str] = None,
 ):
     """Factory function returning the best available LLM with automatic rate limit fallback.
-    Default: Groq llama-3.3-70b-versatile with fallback to llama-3.1-8b-instant.
+    Default: Groq llama-3.1-8b-instant (ultra-fast 560 t/s, 128k context, active on all accounts).
     Accepts custom BYOK Groq API key per user so the host pays $0 for LLM inference.
     """
     groq_api_key = api_key or os.getenv("GROQ_API_KEY")
     if groq_api_key:
         from langchain_groq import ChatGroq
 
-        default_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        default_model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
         chosen_model = model or default_model
 
         primary = ChatGroq(

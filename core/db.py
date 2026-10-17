@@ -62,6 +62,12 @@ def init_db():
         if "user_id" not in columns:
             cursor.execute("ALTER TABLE chats ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
 
+        # Migration: Add langsmith_api_key column if it doesn't exist in existing users table
+        cursor.execute("PRAGMA table_info(users)")
+        user_columns = [row["name"] for row in cursor.fetchall()]
+        if "langsmith_api_key" not in user_columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN langsmith_api_key TEXT")
+
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chats_user_id ON chats (user_id)")
 
         # Messages table
@@ -81,22 +87,29 @@ def init_db():
 
 # ─── User CRUD ─────────────────────────────────────────────────────────────────
 
-def create_user(name: str, email: str, password_hash: str, groq_api_key: Optional[str] = None) -> Dict[str, Any]:
+def create_user(
+    name: str,
+    email: str,
+    password_hash: str,
+    groq_api_key: Optional[str] = None,
+    langsmith_api_key: Optional[str] = None
+) -> Dict[str, Any]:
     user_id = str(uuid.uuid4())
     email_clean = email.strip().lower()
     now = datetime.utcnow().isoformat()
     conn = get_db()
     with conn:
         conn.execute("""
-            INSERT INTO users (id, name, email, password_hash, groq_api_key, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (user_id, name.strip(), email_clean, password_hash, groq_api_key, now))
+            INSERT INTO users (id, name, email, password_hash, groq_api_key, langsmith_api_key, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, name.strip(), email_clean, password_hash, groq_api_key, langsmith_api_key, now))
     conn.close()
     return {
         "id": user_id,
         "name": name.strip(),
         "email": email_clean,
         "has_groq_key": bool(groq_api_key),
+        "has_langsmith_key": bool(langsmith_api_key),
         "created_at": now,
     }
 
@@ -119,12 +132,23 @@ def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
-def update_user_groq_key(user_id: str, groq_api_key: str) -> bool:
+def update_user_keys(
+    user_id: str,
+    groq_api_key: Optional[str] = None,
+    langsmith_api_key: Optional[str] = None
+) -> bool:
     conn = get_db()
     with conn:
-        conn.execute("UPDATE users SET groq_api_key = ? WHERE id = ?", (groq_api_key.strip(), user_id))
+        if groq_api_key is not None:
+            conn.execute("UPDATE users SET groq_api_key = ? WHERE id = ?", (groq_api_key.strip(), user_id))
+        if langsmith_api_key is not None:
+            conn.execute("UPDATE users SET langsmith_api_key = ? WHERE id = ?", (langsmith_api_key.strip(), user_id))
     conn.close()
     return True
+
+
+def update_user_groq_key(user_id: str, groq_api_key: str) -> bool:
+    return update_user_keys(user_id, groq_api_key=groq_api_key)
 
 
 # ─── Multi-Tenant Chats CRUD ───────────────────────────────────────────────────

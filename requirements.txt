@@ -24,6 +24,7 @@ langchain-core>=0.2.0
 langchain-community>=0.2.0
 langchain-groq>=0.1.0             # Groq provider (Llama-3.3-70b / Qwen)
 langchain-google-genai>=1.0.0     # Google Gemini fallback provider
+langsmith>=0.1.0                  # LangSmith observability, token usage & rate-limit telemetry
 
 # ── RAG Pipeline (lightweight TFIDF — no torch/chromadb needed) ───────────────
 tiktoken>=0.7.0                   # Token counting for text splitting

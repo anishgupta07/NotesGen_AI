@@ -8,7 +8,7 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-from core.llm import get_llm
+from core.llm import get_llm, extract_and_log_token_usage
 from core.db import get_chat
 
 DATA_DIR_ENV = os.getenv("DATA_DIR")
@@ -122,14 +122,16 @@ Video Title: {video_title}
         ("human", "{question}"),
     ])
 
-    rag_chain = (
+    llm_runner = (
         {
             "context": retriever | RunnableLambda(format_docs),
             "question": RunnablePassthrough(),
         }
         | prompt
         | llm
-        | StrOutputParser()
     )
 
-    return rag_chain.invoke(question)
+    response = llm_runner.invoke(question)
+    model_name = getattr(llm, "model_name", getattr(llm, "model", "Groq"))
+    extract_and_log_token_usage(response, model_name=model_name, step_name="RAG Chat")
+    return response.content

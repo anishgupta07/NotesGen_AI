@@ -5,6 +5,93 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def setup_langsmith_tracing(api_key: Optional[str] = None, project: Optional[str] = None) -> bool:
+    """Configures LangSmith tracing layer to monitor token counts, latency, and rate-limit diagnostics.
+    Can be configured via environment variables (LANGCHAIN_API_KEY / LANGSMITH_API_KEY) or per-user key."""
+    key = api_key or os.getenv("LANGCHAIN_API_KEY") or os.getenv("LANGSMITH_API_KEY")
+    if key and key.strip():
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_API_KEY"] = key.strip()
+        os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+        os.environ["LANGCHAIN_PROJECT"] = project or os.getenv("LANGCHAIN_PROJECT", "NotesGen-AI")
+        return True
+    return False
+
+
+# Auto-activate on startup if environment keys are present
+setup_langsmith_tracing()
+
+
+def get_langsmith_status() -> dict:
+    """Check if LangSmith observability tracing is currently enabled."""
+    is_active = os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true" and bool(os.getenv("LANGCHAIN_API_KEY"))
+    return {
+        "active": is_active,
+        "project": os.getenv("LANGCHAIN_PROJECT", "NotesGen-AI") if is_active else None,
+        "endpoint": os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com") if is_active else None,
+    }
+
+
+def extract_and_log_token_usage(
+    response,
+    model_name: str = "Unknown",
+    step_name: str = "Generation"
+) -> dict:
+    """Extract token counts (prompt, completion, total) and log telemetry to console for rate-limit tracking."""
+    usage = {}
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        usage = {
+            "prompt_tokens": response.usage_metadata.get("input_tokens", 0),
+            "completion_tokens": response.usage_metadata.get("output_tokens", 0),
+            "total_tokens": response.usage_metadata.get("total_tokens", 0),
+        }
+    elif hasattr(response, "response_metadata") and response.response_metadata:
+        raw_usage = response.response_metadata.get("token_usage", {})
+        usage = {
+            "prompt_tokens": raw_usage.get("prompt_tokens", 0),
+            "completion_tokens": raw_usage.get("completion_tokens", 0),
+            "total_tokens": raw_usage.get("total_tokens", 0),
+        }
+
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+    total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
+    pct_tpm = (total_tokens / 8000.0) * 100.0 if total_tokens else 0.0
+
+    print(
+        f"📊 [LangSmith/Token Telemetry] [{step_name}] Model: {model_name} | "
+        f"Prompt: {prompt_tokens:,} tokens | Output: {completion_tokens:,} tokens | "
+        f"Total: {total_tokens:,} tokens (~{pct_tpm:.1f}% of Groq 8k TPM limit)"
+    )
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "pct_tpm": pct_tpm,
+    }
+
+
+def log_rate_limit_diagnostic(error: Exception, model_name: str) -> str:
+    """Diagnose and explain why a rate limit (HTTP 429) or model error occurred."""
+    err_str = str(error)
+    print(f"⚠️ [Rate Limit Diagnostic] Model '{model_name}' encountered error:\n   ↳ {err_str}")
+
+    lower = err_str.lower()
+    if "rate limit" in lower or "429" in lower or "tpm" in lower:
+        print(
+            f"💡 [Rate Limit Analysis] Model '{model_name}' hit Groq's 8,000 TPM limit. "
+            f"Rotating immediately to another model pool with an independent TPM quota..."
+        )
+        return "TPM_RATE_LIMIT"
+    elif "404" in lower or "does not exist" in lower:
+        print(
+            f"💡 [Model Deprecation Notice] Model '{model_name}' is deprecated or requires enterprise tier. "
+            f"Rotating to next active developer model..."
+        )
+        return "MODEL_NOT_FOUND"
+    return "UNKNOWN_ERROR"
+
+
 def get_llm(
     temperature: float = 0.2,
     model: str = None,

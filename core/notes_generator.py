@@ -2,7 +2,11 @@ import time
 from typing import Optional
 from langchain_core.output_parsers import StrOutputParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from core.llm import get_llm
+from core.llm import (
+    get_llm,
+    extract_and_log_token_usage,
+    log_rate_limit_diagnostic,
+)
 from core.prompts import (
     DETAILED_NOTES_PROMPT,
     CHEATSHEET_PROMPT,
@@ -34,8 +38,9 @@ def invoke_chain_with_rate_limit_protection(
     payload: dict,
     groq_api_key: Optional[str] = None
 ) -> str:
-    """Invokes chain with automatic model-pool rotation across independent TPM rate limits on Groq."""
+    """Invokes chain with LangSmith observability, token usage telemetry, and automatic model-pool rotation."""
     prompt = payload.get("__prompt__", DETAILED_NOTES_PROMPT)
+    inputs = {k: v for k, v in payload.items() if not k.startswith("__")}
     last_err = None
 
     for model_name in MODEL_ROTATION_POOL:
@@ -47,16 +52,17 @@ def invoke_chain_with_rate_limit_protection(
                 enable_fallbacks=False,
                 api_key=groq_api_key
             )
-            step_chain = prompt | llm | StrOutputParser()
-            return step_chain.invoke(payload)
+            pv = prompt.invoke(inputs)
+            response = llm.invoke(pv)
+            extract_and_log_token_usage(response, model_name=model_name, step_name="Notes Generation")
+            return response.content
         except Exception as e:
             last_err = e
-            err_str = str(e).lower()
-            print(f"Model {model_name} notice: {err_str[:120]}. Rotating to next model pool...")
+            log_rate_limit_diagnostic(e, model_name=model_name)
             time.sleep(1.0)
             continue
 
-    raise RuntimeError(f"Failed to generate notes: {last_err}")
+    raise RuntimeError(f"Failed to generate notes across model pool: {last_err}")
 
 
 def generate_video_notes(

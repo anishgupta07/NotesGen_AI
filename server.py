@@ -1,5 +1,6 @@
 import os
 import sys
+import uuid
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Depends, Header, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,12 +21,14 @@ from core.db import (
     get_user_by_email,
     get_user_by_id,
     update_user_groq_key,
+    update_user_keys,
     create_chat,
     get_all_chats,
     get_chat,
     add_message,
     delete_chat,
 )
+from core.llm import setup_langsmith_tracing, get_langsmith_status
 from core.youtube_helper import (
     get_youtube_transcript_with_timestamps,
     filter_transcript_by_timeline,
@@ -66,6 +69,7 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     groq_api_key: Optional[str] = None
+    langsmith_api_key: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -73,8 +77,9 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class UpdateGroqKeyRequest(BaseModel):
-    groq_api_key: str
+class UpdateKeysRequest(BaseModel):
+    groq_api_key: Optional[str] = None
+    langsmith_api_key: Optional[str] = None
 
 
 class GenerateNotesRequest(BaseModel):
@@ -138,6 +143,7 @@ def register(req: RegisterRequest):
         email=email_clean,
         password_hash=pwd_hash,
         groq_api_key=req.groq_api_key.strip() if req.groq_api_key else None,
+        langsmith_api_key=req.langsmith_api_key.strip() if req.langsmith_api_key else None,
     )
     token = create_access_token(user_id=user["id"], email=user["email"], name=user["name"])
     return {
@@ -147,6 +153,7 @@ def register(req: RegisterRequest):
             "name": user["name"],
             "email": user["email"],
             "has_groq_key": user["has_groq_key"],
+            "has_langsmith_key": user["has_langsmith_key"],
         },
     }
 
@@ -168,6 +175,7 @@ def login(req: LoginRequest):
             "name": user["name"],
             "email": user["email"],
             "has_groq_key": bool(user.get("groq_api_key")),
+            "has_langsmith_key": bool(user.get("langsmith_api_key")),
         },
     }
 
@@ -179,16 +187,31 @@ def get_current_user_profile(current_user: dict = Depends(get_current_user)):
         "name": current_user["name"],
         "email": current_user["email"],
         "has_groq_key": bool(current_user.get("groq_api_key")),
+        "has_langsmith_key": bool(current_user.get("langsmith_api_key")),
+        "langsmith_status": get_langsmith_status(),
     }
 
 
 @app.put("/api/auth/groq-key")
-def update_groq_key(req: UpdateGroqKeyRequest, current_user: dict = Depends(get_current_user)):
-    key = req.groq_api_key.strip()
-    if not key:
-        raise HTTPException(status_code=400, detail="Groq API key cannot be empty.")
-    update_user_groq_key(current_user["id"], key)
-    return {"success": True, "has_groq_key": True}
+@app.put("/api/auth/keys")
+def update_user_api_keys(req: UpdateKeysRequest, current_user: dict = Depends(get_current_user)):
+    groq_key = req.groq_api_key.strip() if req.groq_api_key else None
+    langsmith_key = req.langsmith_api_key.strip() if req.langsmith_api_key else None
+
+    if not groq_key and not langsmith_key:
+        raise HTTPException(status_code=400, detail="Please provide at least one key to update.")
+
+    update_user_keys(current_user["id"], groq_api_key=groq_key, langsmith_api_key=langsmith_key)
+    if langsmith_key:
+        setup_langsmith_tracing(api_key=langsmith_key)
+
+    fresh = get_user_by_id(current_user["id"]) or {}
+    return {
+        "success": True,
+        "has_groq_key": bool(fresh.get("groq_api_key")),
+        "has_langsmith_key": bool(fresh.get("langsmith_api_key")),
+        "langsmith_status": get_langsmith_status(),
+    }
 
 
 # ─── Chat & Note Endpoints ──────────────────────────────────────────────────────
@@ -219,6 +242,10 @@ def api_generate_notes(req: GenerateNotesRequest, current_user: dict = Depends(g
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Groq API Key is required. Please set your personal free Groq API key in the top settings modal.",
         )
+
+    # Enable LangSmith tracing if user has personal LangSmith key
+    if current_user.get("langsmith_api_key"):
+        setup_langsmith_tracing(api_key=current_user["langsmith_api_key"])
 
     transcript = None
 
@@ -337,6 +364,9 @@ async def api_generate_from_file(
             detail="Groq API Key is required. Please set your personal free Groq API key in the top settings modal.",
         )
 
+    if current_user.get("langsmith_api_key"):
+        setup_langsmith_tracing(api_key=current_user["langsmith_api_key"])
+
     file_ext = os.path.splitext(file.filename or "")[1] or ".mp3"
     temp_upload_path = os.path.join(DOWNLOAD_DIR, f"upload_{uuid.uuid4().hex[:8]}{file_ext}")
 
@@ -424,6 +454,9 @@ def api_ask_question(chat_id: str, req: ChatMessageRequest, current_user: dict =
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Groq API key required. Please configure in Settings.",
         )
+
+    if current_user.get("langsmith_api_key"):
+        setup_langsmith_tracing(api_key=current_user["langsmith_api_key"])
 
     # Query topic-isolated RAG engine with language and video title
     chat_lang = chat.get("language", "english")

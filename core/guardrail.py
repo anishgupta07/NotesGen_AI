@@ -1,6 +1,6 @@
 import json
 import re
-from core.llm import get_llm
+from core.llm import get_llm, extract_and_log_token_usage
 from langchain_core.messages import SystemMessage, HumanMessage
 
 
@@ -52,6 +52,7 @@ Output MUST be strictly valid JSON:
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_content)
         ])
+        extract_and_log_token_usage(response, model_name="openai/gpt-oss-20b", step_name="Educational Guardrail")
         raw_text = response.content.strip()
 
         # Clean JSON markdown blocks

@@ -13,14 +13,14 @@ def get_llm(
     api_key: Optional[str] = None,
 ):
     """Factory function returning the best available LLM with automatic rate limit fallback.
-    Default: Groq llama-3.1-8b-instant (ultra-fast 560 t/s, 128k context, active on all accounts).
+    Default: Groq openai/gpt-oss-120b (flagship open-source model, 131k context) with fallback to openai/gpt-oss-20b.
     Accepts custom BYOK Groq API key per user so the host pays $0 for LLM inference.
     """
     groq_api_key = api_key or os.getenv("GROQ_API_KEY")
     if groq_api_key:
         from langchain_groq import ChatGroq
 
-        default_model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+        default_model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
         chosen_model = model or default_model
 
         primary = ChatGroq(
@@ -34,18 +34,19 @@ def get_llm(
         if not enable_fallbacks or model is not None:
             return primary
 
-        # Create fallbacks with independent rate limit pools on Groq
+        # Create fallbacks with independent models on Groq developer plan
         fallbacks = []
-        if chosen_model != "llama-3.1-8b-instant":
-            fallbacks.append(
-                ChatGroq(
-                    model="llama-3.1-8b-instant",
-                    groq_api_key=groq_api_key,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    max_retries=2,
+        for fb_model in ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"]:
+            if chosen_model != fb_model:
+                fallbacks.append(
+                    ChatGroq(
+                        model=fb_model,
+                        groq_api_key=groq_api_key,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        max_retries=2,
+                    )
                 )
-            )
 
         if fallbacks:
             return primary.with_fallbacks(fallbacks)

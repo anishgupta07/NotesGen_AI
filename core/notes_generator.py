@@ -42,7 +42,7 @@ def invoke_chain_with_rate_limit_protection(
                     try:
                         fallback_llm = get_llm(
                             temperature=0.2,
-                            model="llama-3.1-8b-instant",
+                            model="openai/gpt-oss-20b",
                             max_tokens=SAFE_MAX_TOKENS,
                             api_key=groq_api_key
                         )

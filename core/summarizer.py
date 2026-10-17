@@ -49,7 +49,7 @@ def summarize(transcript: str, groq_api_key: str = None) -> str:
 
 
 def generate_title(transcript: str, groq_api_key: str = None) -> str:
-    llm = get_llm(model="llama-3.1-8b-instant", max_tokens=40, temperature=0.2, api_key=groq_api_key)
+    llm = get_llm(model="openai/gpt-oss-20b", max_tokens=40, temperature=0.2, api_key=groq_api_key)
 
     title_chain = (
         RunnablePassthrough() | RunnableLambda(lambda x: {"text": x}) | 

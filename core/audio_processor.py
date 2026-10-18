@@ -13,13 +13,21 @@ DOWNLOAD_DIR = str(Path(__file__).resolve().parent.parent / "data" / "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-def cleanup_downloads_dir() -> None:
+def cleanup_downloads_dir(preserve_paths: list[str] | None = None) -> None:
     """Remove any lingering temporary audio or download files in data/downloads."""
+    preserved = {
+        os.path.abspath(path)
+        for path in (preserve_paths or [])
+        if path
+    }
     if os.path.exists(DOWNLOAD_DIR):
         for item in os.listdir(DOWNLOAD_DIR):
             item_path = os.path.join(DOWNLOAD_DIR, item)
+            abs_item_path = os.path.abspath(item_path)
             # Never delete cookie files
             if "cookie" in item.lower():
+                continue
+            if abs_item_path in preserved:
                 continue
             if os.path.isfile(item_path):
                 try:
@@ -164,8 +172,12 @@ def convert_to_mp3(input_path: str) -> str:
         "-b:a", "64k",
         output_path
     ]
-    import subprocess
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    try:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        detail = stderr.splitlines()[-1] if stderr else "FFmpeg failed while converting the uploaded file."
+        raise RuntimeError(detail) from exc
     return output_path
 
 
@@ -230,12 +242,12 @@ def cleanup_audio_files(file_paths: list[str]) -> None:
 
 def process_input(source: str) -> list:
     """Process a YouTube URL or local file into manageable 10-minute compressed MP3 audio chunks."""
-    cleanup_downloads_dir()
-
     if source.startswith("http://") or source.startswith("https://"):
+        cleanup_downloads_dir()
         print("Detected YouTube URL. Downloading audio as compressed MP3...")
         audio_path = download_youtube_audio(source)
     else:
+        cleanup_downloads_dir(preserve_paths=[source])
         print("Detected local file. Converting to MP3...")
         audio_path = convert_to_mp3(source)
 

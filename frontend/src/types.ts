@@ -3,6 +3,7 @@ export interface User {
   name: string;
   email: string;
   has_groq_key: boolean;
+  has_langsmith_key?: boolean;
 }
 
 export interface AuthResponse {

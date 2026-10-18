@@ -84,16 +84,24 @@ export async function fetchCurrentUser(): Promise<User> {
   return res.json();
 }
 
-export async function updateGroqApiKey(groqApiKey: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/auth/groq-key`, {
+export async function updateApiKeys(groqApiKey?: string, langsmithApiKey?: string): Promise<void> {
+  const body: Record<string, string> = {};
+  if (groqApiKey) body.groq_api_key = groqApiKey;
+  if (langsmithApiKey) body.langsmith_api_key = langsmithApiKey;
+
+  const res = await fetch(`${API_BASE}/auth/keys`, {
     method: 'PUT',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ groq_api_key: groqApiKey }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || 'Failed to update Groq API key');
+    throw new Error(errorData.detail || 'Failed to update API keys');
   }
+}
+
+export async function updateGroqApiKey(groqApiKey: string): Promise<void> {
+  return updateApiKeys(groqApiKey);
 }
 
 // ─── Chat & Note API ──────────────────────────────────────────────────────────

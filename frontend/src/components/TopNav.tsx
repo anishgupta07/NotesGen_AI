@@ -2,18 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   PanelLeftClose,
   PanelLeft,
-  Share2,
   ChevronDown,
-  Shield,
-  ArrowLeft,
-  Columns2,
-  FileText,
-  MessageSquare,
   Key,
   LogOut,
-  User as UserIcon,
   AlertTriangle,
   LogIn,
+  Download,
 } from 'lucide-react';
 import { ChatDetail, User } from '../types';
 import { getChatTitle } from '../utils/chatTitle';
@@ -29,6 +23,7 @@ interface TopNavProps {
   onOpenAuth: () => void;
   onOpenKeySettings: () => void;
   onLogout: () => void;
+  onDownloadNotes?: () => void;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -42,6 +37,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   onOpenAuth,
   onOpenKeySettings,
   onLogout,
+  onDownloadNotes,
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -56,153 +52,124 @@ export const TopNav: React.FC<TopNavProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleDownload = () => {
+    if (onDownloadNotes) {
+      onDownloadNotes();
+      return;
+    }
+    if (!activeChat) return;
+    const safeTitle = getChatTitle(activeChat).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `${safeTitle}.md`;
+    const blob = new Blob([activeChat.notes], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <header className="h-14 border-b border-[#181920] bg-[#090a0c] px-3 md:px-5 flex items-center justify-between gap-3 shrink-0 select-none z-20">
-      {/* Left: Sidebar Toggle, New Video & Context */}
-      <div className="flex items-center gap-2.5 min-w-0">
+    <header className="h-14 border-b border-[#E5DDD1] bg-[#FBF9F5] px-4 md:px-6 flex items-center justify-between gap-3 shrink-0 select-none z-20 font-['Plus_Jakarta_Sans',sans-serif]">
+      {/* Left: Sidebar toggle + Clean Breadcrumbs / Logo */}
+      <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={onToggleSidebar}
-          className="w-8 h-8 rounded-lg bg-[#121319] hover:bg-[#181a22] border border-[#1e2029] flex items-center justify-center text-[#848c9c] hover:text-white transition cursor-pointer shrink-0"
+          className="w-8 h-8 rounded-lg text-[#8C827A] hover:text-[#1C1917] hover:bg-[#F2EFE9] flex items-center justify-center transition cursor-pointer shrink-0"
           title={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
         >
           {isSidebarOpen ? (
             <PanelLeftClose className="w-4 h-4" />
           ) : (
-            <PanelLeft className="w-4 h-4 text-[#ff2442]" />
+            <PanelLeft className="w-4 h-4 text-[#B83826]" />
           )}
         </button>
 
         {activeChat ? (
-          <>
-            {/* New Video button shifted to TopNav */}
+          <div className="flex items-center gap-1.5 text-xs text-[#8C827A] truncate">
+            {/* NotesGen clickable logo */}
             <button
               onClick={onNewChat}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#121319] hover:bg-[#1a1c25] border border-[#1e2029] text-xs font-semibold text-[#cbd5e1] hover:text-white transition cursor-pointer shrink-0"
-              title="Return to home / generate new note"
+              className="font-serif font-bold text-sm md:text-base text-[#1C1917] hover:text-[#B83826] transition cursor-pointer"
             >
-              <ArrowLeft className="w-3.5 h-3.5 text-[#ff2442]" />
-              <span className="hidden sm:inline">New Video</span>
+              NotesGen
             </button>
-
-            <div className="h-4 w-[1px] bg-[#1e2029] hidden sm:block shrink-0" />
-
-            {/* Video Title */}
-            <div className="flex items-center gap-2 truncate">
-              <div className="w-2 h-2 rounded-full bg-[#10b981] shadow-xs shadow-emerald-500/50 shrink-0" />
-              <span className="text-xs font-semibold text-[#f1f3f7] truncate max-w-[140px] md:max-w-[220px]">
-                {getChatTitle(activeChat)}
-              </span>
-            </div>
-          </>
-        ) : (
-          <div className="flex items-center gap-2 truncate">
-            <div className="w-2 h-2 rounded-full bg-[#10b981] shadow-xs shadow-emerald-500/50 shrink-0" />
-            <span className="text-xs font-semibold text-[#f1f3f7] truncate">
-              NotesGen Workspace
+            <span>/</span>
+            {viewMode === 'notes' && (
+              <>
+                <span className="text-[#8C827A]">Notes</span>
+                <span>/</span>
+              </>
+            )}
+            <span className="font-semibold text-[#1C1917] truncate max-w-[150px] md:max-w-[320px]">
+              {getChatTitle(activeChat)}
             </span>
           </div>
+        ) : (
+          <button
+            onClick={onNewChat}
+            className="font-serif font-bold text-lg md:text-xl text-[#1C1917] hover:opacity-90 transition text-left cursor-pointer"
+          >
+            NotesGen
+          </button>
         )}
       </div>
 
-      {/* Center: Shifted View Switcher Controls (Split View, Full Screen Notes, Chat) */}
-      {activeChat && (
-        <div className="flex items-center bg-[#121319] p-0.5 rounded-lg border border-[#1f212b] shrink-0">
-          <button
-            onClick={() => onSetViewMode('split')}
-            className={`flex items-center gap-1.5 px-2.5 md:px-3 py-1 rounded-md font-semibold text-xs transition cursor-pointer ${
-              viewMode === 'split'
-                ? 'border border-[#ff2442] text-white bg-[#220c11]'
-                : 'text-[#64748b] hover:text-[#cbd5e1]'
-            }`}
-            title="Split view: Notes and Chat side-by-side"
-          >
-            <Columns2 className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Split View</span>
-          </button>
-
+      {/* Right Controls: Mode Toggle, Download, Key Settings, Profile */}
+      <div className="flex items-center gap-2.5 shrink-0">
+        {/* If chat is open, show "Back to notes" pill button (matching Image 1) */}
+        {activeChat && (viewMode === 'split' || viewMode === 'chat') && (
           <button
             onClick={() => onSetViewMode('notes')}
-            className={`flex items-center gap-1.5 px-2.5 md:px-3 py-1 rounded-md font-semibold text-xs transition cursor-pointer ${
-              viewMode === 'notes'
-                ? 'border border-[#ff2442] text-white bg-[#220c11]'
-                : 'text-[#64748b] hover:text-[#cbd5e1]'
-            }`}
-            title="Full screen notes access"
+            className="px-3.5 py-1.5 rounded-full bg-[#FAF8F5] border border-[#DDD6C8] hover:bg-[#F2EFE9] text-xs font-medium text-[#1C1917] transition cursor-pointer shadow-2xs"
           >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Full Screen Notes</span>
-          </button>
-
-          <button
-            onClick={() => onSetViewMode('chat')}
-            className={`flex items-center gap-1.5 px-2.5 md:px-3 py-1 rounded-md font-semibold text-xs transition cursor-pointer ${
-              viewMode === 'chat'
-                ? 'border border-[#ff2442] text-white bg-[#220c11]'
-                : 'text-[#64748b] hover:text-[#cbd5e1]'
-            }`}
-            title="Full screen chat assistant"
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span>Chat ({activeChat.messages.length})</span>
-          </button>
-        </div>
-      )}
-
-      {/* Right: Groq Key Status, Academic Guardrail, User Dropdown */}
-      <div className="flex items-center gap-2 shrink-0">
-        {/* Groq BYOK Key Status Badge */}
-        {user && (
-          <button
-            onClick={onOpenKeySettings}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer ${
-              user.has_groq_key
-                ? 'bg-[#0f1f17] border-[#1a442c] text-emerald-300 hover:bg-[#14291f]'
-                : 'bg-[#291a0c] border-[#533414] text-amber-300 hover:bg-[#382310] animate-pulse'
-            }`}
-            title="Configure personal Groq API Key (BYOK)"
-          >
-            {user.has_groq_key ? (
-              <>
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                <span className="hidden sm:inline">Groq Active</span>
-              </>
-            ) : (
-              <>
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>Set Groq Key</span>
-              </>
-            )}
+            Back to notes
           </button>
         )}
 
-        {/* Academic Guardrail pill */}
-        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#151014] border border-[#2d1820] text-xs text-[#cbd5e1] font-medium">
-          <Shield className="w-3.5 h-3.5 text-[#ff2442]" />
-          <span>Guardrail</span>
-        </div>
+        {/* If in notes view, show "Download PDF" dark pill button (matching Image 2) */}
+        {activeChat && viewMode === 'notes' && (
+          <button
+            onClick={handleDownload}
+            className="px-4 py-1.5 rounded-full bg-[#1C1917] hover:bg-black text-white text-xs font-medium transition cursor-pointer shadow-xs flex items-center gap-1.5"
+            title="Download notes file"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Download PDF</span>
+          </button>
+        )}
 
-        {/* User Profile / Auth Area */}
+        {/* Groq Key Status badge (if not configured) */}
+        {user && !user.has_groq_key && (
+          <button
+            onClick={onOpenKeySettings}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FEF3C7] border border-[#F59E0B]/40 text-[#92400E] text-xs font-semibold hover:bg-[#FDE68A] transition cursor-pointer animate-pulse"
+            title="Configure personal Groq API Key"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-[#D97706]" />
+            <span className="hidden sm:inline">Set Groq Key</span>
+          </button>
+        )}
+
+        {/* User Avatar Circle */}
         {user ? (
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-2 pl-1 cursor-pointer group rounded-lg py-1 px-1.5 hover:bg-[#13141b] transition"
+              className="w-8 h-8 rounded-full bg-[#1C1917] text-white font-serif font-bold text-xs flex items-center justify-center hover:opacity-90 transition cursor-pointer shadow-xs"
+              title={user.name}
             >
-              <div className="w-7 h-7 rounded-full bg-[#ff2442] text-white font-bold text-xs flex items-center justify-center shadow-xs">
-                {user.name.charAt(0).toUpperCase()}
-              </div>
-              <span className="text-xs font-semibold text-[#f1f3f7] hidden xl:inline group-hover:text-white">
-                {user.name}
-              </span>
-              <ChevronDown className="w-3 h-3 text-[#64748b] group-hover:text-[#cbd5e1] hidden sm:inline" />
+              {user.name.charAt(0).toUpperCase()}
             </button>
 
-            {/* Profile Dropdown Menu */}
+            {/* Profile Dropdown */}
             {dropdownOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-[#12131b] border border-[#232534] rounded-xl shadow-2xl py-1 z-30 animate-in fade-in duration-150">
-                <div className="px-3 py-2 border-b border-[#1c1e2b]">
-                  <p className="text-xs font-bold text-white truncate">{user.name}</p>
-                  <p className="text-[11px] text-[#788195] truncate">{user.email}</p>
+              <div className="absolute right-0 mt-2 w-48 bg-[#FFFFFF] border border-[#E5DDD1] rounded-2xl shadow-xl py-1.5 z-30 animate-in fade-in duration-150">
+                <div className="px-3.5 py-2 border-b border-[#F2EFE9]">
+                  <p className="text-xs font-bold text-[#1C1917] truncate">{user.name}</p>
+                  <p className="text-[11px] text-[#8C827A] truncate">{user.email}</p>
                 </div>
 
                 <button
@@ -210,10 +177,10 @@ export const TopNav: React.FC<TopNavProps> = ({
                     setDropdownOpen(false);
                     onOpenKeySettings();
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-[#cbd5e1] hover:text-white hover:bg-[#1a1c26] flex items-center gap-2 transition cursor-pointer"
+                  className="w-full text-left px-3.5 py-2 text-xs font-medium text-[#1C1917] hover:bg-[#FAF8F5] flex items-center gap-2 transition cursor-pointer"
                 >
-                  <Key className="w-3.5 h-3.5 text-[#ff2442]" />
-                  <span>Groq API Key</span>
+                  <Key className="w-3.5 h-3.5 text-[#B83826]" />
+                  <span>API Key Settings</span>
                 </button>
 
                 <button
@@ -221,7 +188,7 @@ export const TopNav: React.FC<TopNavProps> = ({
                     setDropdownOpen(false);
                     onLogout();
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-rose-400 hover:text-rose-300 hover:bg-[#200e12] flex items-center gap-2 transition cursor-pointer border-t border-[#1c1e2b]"
+                  className="w-full text-left px-3.5 py-2 text-xs font-medium text-red-600 hover:bg-[#FDF2F2] flex items-center gap-2 transition cursor-pointer border-t border-[#F2EFE9]"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Sign Out</span>
@@ -232,7 +199,7 @@ export const TopNav: React.FC<TopNavProps> = ({
         ) : (
           <button
             onClick={onOpenAuth}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#ff2442] hover:bg-[#e61b36] text-white text-xs font-bold transition cursor-pointer shadow-md shadow-red-950/40"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#B83826] hover:bg-[#A32E1E] text-white text-xs font-medium transition cursor-pointer shadow-sm"
           >
             <LogIn className="w-3.5 h-3.5" />
             <span>Sign In</span>

@@ -20,7 +20,6 @@ import {
 import { ChatSummary, ChatDetail, ChatMessage, User } from './types';
 import { getChatTitle } from './utils/chatTitle';
 import {
-  Sparkles,
   Loader2,
   AlertCircle,
   X,
@@ -115,6 +114,7 @@ export const App: React.FC = () => {
       setErrorMessage(null);
       const detail = await fetchChatById(id);
       setActiveChat(detail);
+      setViewMode('notes');
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to load note');
     } finally {
@@ -157,7 +157,7 @@ export const App: React.FC = () => {
     }
     if (!currentUser.has_groq_key) {
       setIsKeyModalOpen(true);
-      setErrorMessage('Please configure your free Groq API key in the settings modal to generate notes.');
+      setErrorMessage('Please configure your free Groq API key in Settings to generate notes.');
       return;
     }
 
@@ -188,6 +188,7 @@ export const App: React.FC = () => {
       ]);
       setActiveChatId(result.id);
       setActiveChat(result);
+      setViewMode('notes');
     } catch (err: any) {
       setErrorMessage(err.message || 'Error generating notes. Please check the URL or try again.');
     } finally {
@@ -207,7 +208,7 @@ export const App: React.FC = () => {
     }
     if (!currentUser.has_groq_key) {
       setIsKeyModalOpen(true);
-      setErrorMessage('Please configure your free Groq API key in the settings modal to generate notes.');
+      setErrorMessage('Please configure your free Groq API key in Settings to generate notes.');
       return;
     }
 
@@ -230,6 +231,7 @@ export const App: React.FC = () => {
       ]);
       setActiveChatId(result.id);
       setActiveChat(result);
+      setViewMode('notes');
     } catch (err: any) {
       setErrorMessage(err.message || 'Error generating notes from file.');
     } finally {
@@ -283,7 +285,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#090a0c] text-[#f1f3f7] font-['Plus_Jakarta_Sans',sans-serif] antialiased">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#FBF9F5] text-[#1C1917] font-['Plus_Jakarta_Sans',sans-serif] antialiased">
       {/* Auth & Key Management Modals */}
       <AuthModal
         isOpen={isAuthModalOpen}
@@ -294,13 +296,14 @@ export const App: React.FC = () => {
         isOpen={isKeyModalOpen}
         onClose={() => setIsKeyModalOpen(false)}
         hasGroqKey={Boolean(currentUser?.has_groq_key)}
+        hasLangsmithKey={Boolean(currentUser?.has_langsmith_key)}
         onKeyUpdated={handleKeyUpdated}
       />
 
       {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden"
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -322,7 +325,7 @@ export const App: React.FC = () => {
       </div>
 
       {/* Main Content Workspace */}
-      <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden bg-[#090a0c]">
+      <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden bg-[#FBF9F5]">
         {/* Top Navigation */}
         <TopNav
           isSidebarOpen={sidebarOpen}
@@ -339,14 +342,14 @@ export const App: React.FC = () => {
 
         {/* Global Error Banner */}
         {errorMessage && (
-          <div className="mx-6 mt-3 p-3 bg-[#240c11] border border-[#4d1620] text-rose-300 rounded-xl text-xs md:text-sm flex items-center justify-between gap-3 shadow-lg shrink-0 animate-in fade-in duration-200">
+          <div className="mx-6 mt-3 p-3 bg-[#FEF2F2] border border-[#FCA5A5] text-red-700 rounded-xl text-xs md:text-sm flex items-center justify-between gap-3 shadow-xs shrink-0 animate-in fade-in duration-200">
             <div className="flex items-center gap-2 min-w-0">
-              <AlertCircle className="w-4 h-4 text-[#ff2442] shrink-0" />
+              <AlertCircle className="w-4 h-4 text-[#B83826] shrink-0" />
               <span className="font-medium truncate">{errorMessage}</span>
             </div>
             <button
               onClick={() => setErrorMessage(null)}
-              className="text-[#ff4d66] hover:text-white p-1 cursor-pointer shrink-0"
+              className="text-[#B83826] hover:text-[#A32E1E] p-1 cursor-pointer shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -357,27 +360,26 @@ export const App: React.FC = () => {
         <div className="flex-1 overflow-hidden relative">
           {isGenerating ? (
             /* Loading State while generating notes */
-            <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-5 animate-in fade-in duration-300">
-              <div className="w-14 h-14 rounded-2xl bg-[#200c12] text-[#ff2442] border border-[#3d151f] flex items-center justify-center shadow-2xl shadow-red-950/60">
-                <Loader2 className="w-7 h-7 animate-spin" />
+            <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-4 animate-in fade-in duration-300">
+              <div className="w-12 h-12 rounded-2xl bg-[#F2EFE9] text-[#B83826] border border-[#E5DDD1] flex items-center justify-center shadow-xs">
+                <Loader2 className="w-6 h-6 animate-spin" />
               </div>
               <div className="space-y-1.5 max-w-md">
-                <h2 className="text-xl font-extrabold text-white tracking-tight">
-                  Generating 100% Concept Crux...
+                <h2 className="text-xl font-serif font-bold text-[#1C1917] tracking-tight">
+                  Generating study notes...
                 </h2>
-                <p className="text-xs md:text-sm text-[#848c9c] leading-relaxed">
-                  Extracting instructor's exact analogies, covering 100% of concepts topic-wise, and compiling structured notes in flowing Hinglish.
+                <p className="text-xs md:text-sm text-[#78716C] leading-relaxed">
+                  Extracting instructor's exact analogies, covering concepts topic-wise, and compiling structured notes in flowing language.
                 </p>
               </div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-[#ff4d66] bg-[#1a0b10] border border-[#35141c] px-3.5 py-1.5 rounded-full">
-                <Sparkles className="w-3.5 h-3.5 animate-pulse text-[#ff2442]" />
-                <span>Powered by Groq High-Speed Inference (BYOK)</span>
+              <div className="text-[11px] font-semibold text-[#8C827A] bg-[#FAF8F5] border border-[#E5DDD1] px-3.5 py-1.5 rounded-full">
+                Powered by Groq High-Speed Inference
               </div>
             </div>
           ) : isLoadingDetail ? (
             /* Loading State when loading an existing chat */
             <div className="h-full flex items-center justify-center">
-              <Loader2 className="w-7 h-7 animate-spin text-[#ff2442]" />
+              <Loader2 className="w-6 h-6 animate-spin text-[#B83826]" />
             </div>
           ) : activeChat ? (
             /* Active Notes & Chat View */
@@ -386,20 +388,24 @@ export const App: React.FC = () => {
               <div
                 className={`h-full overflow-hidden transition-all duration-200 ${
                   viewMode === 'split'
-                    ? 'w-full lg:w-[60%] block'
+                    ? 'w-full lg:w-[58%] block'
                     : viewMode === 'notes'
                     ? 'w-full block'
                     : 'hidden'
                 }`}
               >
-                <NotesViewer chat={activeChat} />
+                <NotesViewer
+                  chat={activeChat}
+                  onOpenChat={() => setViewMode('split')}
+                  isChatOpen={viewMode === 'split'}
+                />
               </div>
 
               {/* Chat Pane */}
               <div
                 className={`h-full overflow-hidden transition-all duration-200 ${
                   viewMode === 'split'
-                    ? 'w-full lg:w-[40%] block border-l border-[#171820]'
+                    ? 'w-full lg:w-[42%] block border-l border-[#E5DDD1]'
                     : viewMode === 'chat'
                     ? 'w-full block'
                     : 'hidden'
@@ -421,11 +427,11 @@ export const App: React.FC = () => {
               {viewMode === 'notes' && (
                 <button
                   onClick={() => setViewMode('split')}
-                  className="absolute bottom-6 right-6 px-4 py-2.5 bg-[#ff2442] hover:bg-[#e61b36] text-white rounded-xl shadow-xl shadow-red-950/70 font-bold text-xs flex items-center gap-2 border border-red-500/40 transition hover:scale-105 active:scale-95 cursor-pointer z-10"
-                  title="Open side chat assistant"
+                  className="absolute bottom-6 right-6 px-4 py-2.5 bg-[#B83826] hover:bg-[#A32E1E] text-white rounded-full shadow-lg font-medium text-xs flex items-center gap-2 transition hover:scale-105 active:scale-95 cursor-pointer z-10"
+                  title="Open doubt assistant"
                 >
                   <MessageSquare className="w-4 h-4" />
-                  <span>Open Chat ({activeChat.messages.length})</span>
+                  <span>Ask Doubt ({activeChat.messages.length})</span>
                 </button>
               )}
             </div>
@@ -436,6 +442,8 @@ export const App: React.FC = () => {
                 onGenerate={handleGenerateNotes}
                 onGenerateFile={handleGenerateFromFile}
                 isLoading={isGenerating}
+                recentChats={chats}
+                onSelectChat={handleSelectChat}
               />
             </div>
           )}

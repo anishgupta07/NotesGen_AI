@@ -13,6 +13,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { ChatDetail } from '../types';
+import { getChatTitle } from '../utils/chatTitle';
 
 interface NotesViewerProps {
   chat: ChatDetail;
@@ -33,7 +34,7 @@ export const NotesViewer: React.FC<NotesViewerProps> = ({ chat }) => {
   };
 
   const handleDownload = () => {
-    const safeTitle = (chat.title || 'video_notes').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeTitle = getChatTitle(chat).replace(/[^a-zA-Z0-9_-]/g, '_');
     const filename = `${safeTitle}.md`;
     const blob = new Blob([chat.notes], { type: 'text/markdown;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -66,7 +67,7 @@ export const NotesViewer: React.FC<NotesViewerProps> = ({ chat }) => {
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5 flex-1 min-w-0">
             <h1 className="text-lg md:text-2xl font-bold text-white tracking-tight leading-snug line-clamp-2">
-              {chat.title || 'Video Notes'}
+              {getChatTitle(chat)}
             </h1>
             <div className="flex flex-wrap items-center gap-2 text-xs text-[#848c9c]">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-[#220c11] text-[#ff4d66] font-semibold border border-[#ff2442]/30">

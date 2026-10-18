@@ -65,4 +65,8 @@ def generate_title(transcript: str, groq_api_key: str = None) -> str:
         | StrOutputParser()
     )
 
-    return title_chain.invoke(transcript[:1000]).strip().strip('"\'')
+    raw_title = title_chain.invoke(transcript[:2000]).strip()
+    clean_title = raw_title.splitlines()[0].strip().strip('"\'#*-: ')
+    if not clean_title:
+        raise ValueError("Generated title was empty.")
+    return clean_title[:80]

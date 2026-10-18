@@ -108,3 +108,25 @@ STRUCTURE THE CHEAT SHEET AS FOLLOWS:
     ),
     ("human", "Transcript with timestamps:\n\n{text}"),
 ])
+
+
+CONTINUE_NOTES_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        """You are continuing a study-notes generation task that was cut off before completion.
+
+{language_instruction}
+
+Continue the notes from exactly where the previous response stopped.
+
+Rules:
+- Do NOT restart from the beginning.
+- Do NOT repeat sections that are already covered in the existing notes.
+- Continue with the remaining topics from the transcript in the same structure and tone.
+- Make sure the continuation finishes all remaining parts of the transcript."""
+    ),
+    (
+        "human",
+        "Transcript with timestamps:\n\n{text}\n\nExisting partial notes:\n\n{existing_notes}",
+    ),
+])

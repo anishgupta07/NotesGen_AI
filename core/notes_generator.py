@@ -10,13 +10,16 @@ from core.llm import (
 from core.prompts import (
     DETAILED_NOTES_PROMPT,
     CHEATSHEET_PROMPT,
+    CONTINUE_NOTES_PROMPT,
     get_language_instruction,
 )
 
 # Safe token limits to strictly stay within Groq free-tier's 8,000 TPM limit:
-# 12,000 chars (~3,000 tokens) + 1,400 max completion tokens = ~4,400 tokens per request (< 8,000 TPM limit)
-SAFE_CHUNK_SIZE = 12000
-SAFE_MAX_TOKENS = 1400
+# 9,000 chars (~2,250 tokens) + 2,400 max completion tokens keeps each request comfortably below 8,000 TPM.
+SAFE_CHUNK_SIZE = 9000
+SAFE_MAX_TOKENS = 2400
+CONTINUATION_THRESHOLD = int(SAFE_MAX_TOKENS * 0.9)
+MAX_CONTINUATIONS = 2
 
 # Rotate across models with independent TPM buckets on Groq
 MODEL_ROTATION_POOL = [
@@ -54,8 +57,32 @@ def invoke_chain_with_rate_limit_protection(
             )
             pv = prompt.invoke(inputs)
             response = llm.invoke(pv)
-            extract_and_log_token_usage(response, model_name=model_name, step_name="Notes Generation")
-            return response.content
+            usage = extract_and_log_token_usage(response, model_name=model_name, step_name="Notes Generation")
+
+            content_parts = [response.content]
+            current_usage = usage
+
+            for continuation_index in range(MAX_CONTINUATIONS):
+                if current_usage.get("completion_tokens", 0) < CONTINUATION_THRESHOLD:
+                    break
+
+                continuation_prompt = CONTINUE_NOTES_PROMPT.invoke({
+                    "text": inputs.get("text", ""),
+                    "language_instruction": inputs.get("language_instruction", ""),
+                    "existing_notes": "\n\n".join(content_parts),
+                })
+                continuation_response = llm.invoke(continuation_prompt)
+                current_usage = extract_and_log_token_usage(
+                    continuation_response,
+                    model_name=model_name,
+                    step_name=f"Notes Continuation {continuation_index + 1}",
+                )
+                continuation_text = continuation_response.content.strip()
+                if not continuation_text:
+                    break
+                content_parts.append(continuation_text)
+
+            return "\n\n".join(part.strip() for part in content_parts if part and part.strip())
         except Exception as e:
             last_err = e
             log_rate_limit_diagnostic(e, model_name=model_name)
@@ -77,7 +104,7 @@ def generate_video_notes(
     prompt = get_prompt_by_style(style)
     lang_inst = get_language_instruction(language)
 
-    # 1. Single-pass execution for transcripts within safe TPM size (up to 12,000 characters ~ 3,000 tokens)
+    # 1. Single-pass execution for transcripts within safe TPM size.
     if len(transcript) <= SAFE_CHUNK_SIZE:
         return invoke_chain_with_rate_limit_protection(None, {
             "text": transcript,
@@ -85,10 +112,10 @@ def generate_video_notes(
             "__prompt__": prompt,
         }, groq_api_key=groq_api_key)
 
-    # 2. Multi-chunk breakdown for longer lectures (> 12,000 chars)
+    # 2. Multi-chunk breakdown for longer lectures.
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=SAFE_CHUNK_SIZE,
-        chunk_overlap=400,
+        chunk_overlap=500,
         separators=["\n[", "\n", " "]
     )
     chunks = splitter.split_text(transcript)

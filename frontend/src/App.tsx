@@ -18,6 +18,7 @@ import {
   getToken,
 } from './api';
 import { ChatSummary, ChatDetail, ChatMessage, User } from './types';
+import { getChatTitle } from './utils/chatTitle';
 import {
   Sparkles,
   Loader2,
@@ -406,7 +407,7 @@ export const App: React.FC = () => {
               >
                 <ChatBox
                   chatId={activeChat.id}
-                  videoTitle={activeChat.title}
+                  videoTitle={getChatTitle(activeChat)}
                   messages={activeChat.messages}
                   onSendMessage={handleSendChatMessage}
                   isSending={isSendingChat}

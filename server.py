@@ -2,6 +2,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException, Depends, Header, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -93,6 +94,32 @@ class GenerateNotesRequest(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     question: str
+
+
+def derive_fallback_title(source: str, default_title: str) -> str:
+    """Build a readable fallback title from a URL or uploaded filename."""
+    raw_source = (source or "").strip()
+    if not raw_source:
+        return default_title
+
+    parsed = urlparse(raw_source)
+    if parsed.scheme and parsed.netloc:
+        host = parsed.netloc.replace("www.", "")
+        if "youtube" in host or "youtu.be" in host:
+            return "YouTube Video Notes"
+        return f"{host} Notes"
+
+    stem = Path(raw_source).stem.replace("_", " ").replace("-", " ").strip()
+    return stem or default_title
+
+
+def normalize_chat_title(candidate: Optional[str], fallback_source: str, default_title: str) -> str:
+    """Return a clean, always-visible title for saved chats."""
+    cleaned = (candidate or "").replace("\n", " ").strip().strip('"\'#*-: ')
+    cleaned = " ".join(cleaned.split())
+    if cleaned:
+        return cleaned[:120]
+    return derive_fallback_title(fallback_source, default_title)
 
 
 # ─── Auth Dependency ───────────────────────────────────────────────────────────
@@ -310,9 +337,10 @@ def api_generate_notes(req: GenerateNotesRequest, current_user: dict = Depends(g
 
     # 5. Generate concise Title
     try:
-        title = generate_title(transcript_to_process, groq_api_key=user_groq_key) + timeline_suffix
+        raw_title = generate_title(transcript_to_process, groq_api_key=user_groq_key)
     except Exception:
-        title = f"YouTube Notes{timeline_suffix}"
+        raw_title = ""
+    title = normalize_chat_title(raw_title, url, "YouTube Notes") + timeline_suffix
 
     # 6. Generate Structured Notes (Detailed Notes or Cheat Sheet with speaker's analogies)
     try:
@@ -397,9 +425,10 @@ async def api_generate_from_file(
         raise HTTPException(status_code=400, detail=guardrail_msg)
 
     try:
-        title = generate_title(transcript, groq_api_key=user_groq_key)
+        raw_title = generate_title(transcript, groq_api_key=user_groq_key)
     except Exception:
-        title = file.filename or "Uploaded Lecture Notes"
+        raw_title = ""
+    title = normalize_chat_title(raw_title, file.filename or "", "Uploaded Lecture Notes")
 
     try:
         notes = generate_video_notes(transcript, style=style, language=language, groq_api_key=user_groq_key)

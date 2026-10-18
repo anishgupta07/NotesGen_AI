@@ -16,6 +16,7 @@ import {
   LogIn,
 } from 'lucide-react';
 import { ChatDetail, User } from '../types';
+import { getChatTitle } from '../utils/chatTitle';
 
 interface TopNavProps {
   isSidebarOpen: boolean;
@@ -89,7 +90,7 @@ export const TopNav: React.FC<TopNavProps> = ({
             <div className="flex items-center gap-2 truncate">
               <div className="w-2 h-2 rounded-full bg-[#10b981] shadow-xs shadow-emerald-500/50 shrink-0" />
               <span className="text-xs font-semibold text-[#f1f3f7] truncate max-w-[140px] md:max-w-[220px]">
-                {activeChat.title}
+                {getChatTitle(activeChat)}
               </span>
             </div>
           </>

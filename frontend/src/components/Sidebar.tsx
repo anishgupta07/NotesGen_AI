@@ -10,6 +10,7 @@ import {
   Bookmark,
 } from 'lucide-react';
 import { ChatSummary } from '../types';
+import { getChatTitle } from '../utils/chatTitle';
 
 interface SidebarProps {
   chats: ChatSummary[];
@@ -32,7 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const filteredChats = chats.filter((c) =>
-    (c.title || '').toLowerCase().includes(searchQuery.toLowerCase())
+    getChatTitle(c).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const isToday = (dateStr: string) => {
@@ -234,7 +235,7 @@ const ChatItem: React.FC<ChatItemProps> = ({
         }`}
       />
       <div className="overflow-hidden">
-        <div className="text-xs truncate font-medium text-white">{chat.title}</div>
+        <div className="text-xs truncate font-medium text-white">{getChatTitle(chat)}</div>
         <div className="text-[10px] text-[#64748b]">{subtitle}</div>
       </div>
     </div>
